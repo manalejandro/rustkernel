@@ -1,0 +1,26 @@
+[package]
+name = "drivers"
+version = "0.1.0"
+edition = "2021"
+authors = ["Rust Kernel Contributors"]
+description = "Kernel drivers"
+license = "GPL-2.0"
+
+[dependencies]
+kernel = { path = "../kernel" }
+
+[[bin]]
+name = "dummy_driver"
+path = "src/dummy.rs"
+
+[[bin]]
+name = "mem_devices"
+path = "src/mem.rs"
+
+[[bin]]
+name = "platform_example"
+path = "src/platform_example.rs"
+
+[[bin]]
+name = "ramdisk"
+path = "src/ramdisk.rs"

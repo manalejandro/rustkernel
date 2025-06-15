@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: GPL-2.0
+
+//! Page frame allocator
+
+use crate::types::{PhysAddr, Pfn};
+use crate::error::{Error, Result};
+use crate::sync::Spinlock;
+use alloc::collections::BTreeSet;
+
+/// Page frame allocator
+static PAGE_ALLOCATOR: Spinlock<PageAllocator> = Spinlock::new(PageAllocator::new());
+
+/// Page allocator implementation
+struct PageAllocator {
+    free_pages: BTreeSet<Pfn>,
+    total_pages: usize,
+    allocated_pages: usize,
+}
+
+impl PageAllocator {
+    const fn new() -> Self {
+        Self {
+            free_pages: BTreeSet::new(),
+            total_pages: 0,
+            allocated_pages: 0,
+        }
+    }
+    
+    /// Add a range of pages to the free list
+    fn add_free_range(&mut self, start: Pfn, count: usize) {
+        for i in 0..count {
+            self.free_pages.insert(Pfn(start.0 + i));
+        }
+        self.total_pages += count;
+    }
+    
+    /// Allocate a single page
+    fn alloc_page(&mut self) -> Result<Pfn> {
+        if let Some(pfn) = self.free_pages.iter().next().copied() {
+            self.free_pages.remove(&pfn);
+            self.allocated_pages += 1;
+            Ok(pfn)
+        } else {
+            Err(Error::OutOfMemory)
+        }
+    }
+    
+    /// Free a single page
+    fn free_page(&mut self, pfn: Pfn) {
+        if self.free_pages.insert(pfn) {
+            self.allocated_pages -= 1;
+        }
+    }
+    
+    /// Get statistics
+    fn stats(&self) -> (usize, usize, usize) {
+        (self.total_pages, self.allocated_pages, self.free_pages.len())
+    }
+}
+
+/// Initialize the page allocator
+pub fn init() -> Result<()> {
+    let mut allocator = PAGE_ALLOCATOR.lock();
+    
+    // TODO: Get memory map from bootloader/firmware
+    // For now, add a dummy range
+    let start_pfn = Pfn(0x1000); // Start at 16MB
+    let count = 0x10000; // 256MB worth of pages
+    
+    allocator.add_free_range(start_pfn, count);
+    
+    Ok(())
+}
+
+/// Allocate a page of physical memory
+pub fn alloc_page() -> Result<PhysAddr> {
+    let mut allocator = PAGE_ALLOCATOR.lock();
+    let pfn = allocator.alloc_page()?;
+    Ok(pfn.to_phys_addr())
+}
+
+/// Free a page of physical memory
+pub fn free_page(addr: PhysAddr) {
+    let pfn = Pfn::from_phys_addr(addr);
+    let mut allocator = PAGE_ALLOCATOR.lock();
+    allocator.free_page(pfn);
+}
+
+/// Get page allocator statistics
+pub fn stats() -> (usize, usize, usize) {
+    let allocator = PAGE_ALLOCATOR.lock();
+    allocator.stats()
+}

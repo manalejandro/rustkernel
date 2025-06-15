@@ -1,0 +1,48 @@
+[package]
+name = "rust-kernel"
+version = "0.1.0"
+edition = "2021"
+authors = ["Rust Kernel Contributors"]
+description = "A Rust-based kernel inspired by Linux"
+license = "GPL-2.0"
+
+[workspace]
+members = [
+    "kernel",
+    "drivers",
+    "modules",
+    "arch",
+    "mm",
+    "fs",
+    "net",
+    "security"
+]
+
+[workspace.dependencies]
+kernel = { path = "kernel" }
+
+[lib]
+name = "rust_kernel"
+crate-type = ["staticlib", "cdylib"]
+
+[features]
+default = ["alloc", "std"]
+alloc = []
+std = []
+no_std = []
+
+[profile.dev]
+panic = "abort"
+opt-level = 0
+debug = true
+
+[profile.release]
+panic = "abort"
+opt-level = "s"  # Optimize for size
+debug = false
+lto = true
+codegen-units = 1
+
+[target.'cfg(target_arch = "x86_64")']
+[target.'cfg(target_arch = "aarch64")']
+[target.'cfg(target_arch = "riscv64")']

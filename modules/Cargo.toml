@@ -1,0 +1,18 @@
+[package]
+name = "modules"
+version = "0.1.0"
+edition = "2021"
+authors = ["Rust Kernel Contributors"]
+description = "Kernel modules"
+license = "GPL-2.0"
+
+[dependencies]
+kernel = { path = "../kernel" }
+
+[[bin]]
+name = "hello_module"
+path = "src/hello.rs"
+
+[[bin]]
+name = "test_module"
+path = "src/test.rs"
