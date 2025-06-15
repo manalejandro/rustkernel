@@ -3,8 +3,7 @@
 //! Task scheduler compatible with Linux kernel CFS (Completely Fair Scheduler)
 
 use crate::error::{Error, Result};
-use crate::process::{Process, Thread, ProcessState, ThreadContext};
-use crate::types::{Pid, Tid, Nanoseconds};
+use crate::types::Tid;
 use crate::sync::Spinlock;
 use crate::time;
 use alloc::{collections::{BTreeMap, VecDeque}, vec::Vec};

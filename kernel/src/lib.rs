@@ -36,11 +36,11 @@ pub mod process;
 pub mod scheduler;
 pub mod sync;
 pub mod syscall;
+pub mod syscalls;  // New syscall infrastructure
 pub mod task;
 pub mod time;
 pub mod types;
 
-use core::panic::PanicInfo;
 
 /// Kernel version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

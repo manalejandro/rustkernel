@@ -28,7 +28,7 @@ impl<T> Spinlock<T> {
         }
     }
     
-    pub fn lock(&self) -> SpinlockGuard<T> {
+    pub fn lock(&self) -> SpinlockGuard<'_, T> {
         while self.locked.compare_exchange_weak(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
             // Busy wait
             while self.locked.load(Ordering::Relaxed) {
@@ -39,7 +39,7 @@ impl<T> Spinlock<T> {
         SpinlockGuard { lock: self }
     }
     
-    pub fn try_lock(&self) -> Option<SpinlockGuard<T>> {
+    pub fn try_lock(&self) -> Option<SpinlockGuard<'_, T>> {
         if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
             Some(SpinlockGuard { lock: self })
         } else {

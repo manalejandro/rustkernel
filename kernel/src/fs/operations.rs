@@ -4,9 +4,7 @@
 
 use crate::error::{Error, Result};
 use crate::sync::Arc;
-use crate::memory::{UserPtr, UserSlicePtr};
-use alloc::string::String;
-use alloc::vec::Vec;
+use crate::memory::UserSlicePtr;
 
 /// Address space operations trait - similar to Linux address_space_operations
 pub trait AddressSpaceOperations: Send + Sync {

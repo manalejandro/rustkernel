@@ -3,8 +3,7 @@
 //! Inode abstraction - Linux compatible
 
 use crate::error::{Error, Result};
-use crate::types::*;
-use crate::sync::{Arc, Mutex, RwLock};
+use crate::sync::{Arc, Mutex};
 use crate::device::DeviceNumber;
 use crate::time::{TimeSpec, get_current_time};
 use alloc::string::String;

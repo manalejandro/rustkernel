@@ -3,7 +3,7 @@
 //! Time management compatible with Linux kernel
 
 use crate::error::Result;
-use crate::types::{Nanoseconds, Microseconds, Milliseconds, Seconds, Jiffies};
+use crate::types::Jiffies;
 use core::sync::atomic::{AtomicU64, Ordering};
 use alloc::vec::Vec;  // Add Vec import
 
@@ -118,6 +118,21 @@ pub fn init() -> Result<()> {
     // TODO: Initialize high-resolution timers
     
     crate::info!("Time management initialized, boot time: {} ns", boot_time);
+    Ok(())
+}
+
+/// Initialize time management subsystem
+pub fn init_time() -> Result<()> {
+    // Initialize the timer wheel
+    let _timer_wheel = get_timer_wheel();
+    
+    // Set initial boot time (in a real implementation, this would read from RTC)
+    BOOTTIME_NS.store(0, Ordering::Relaxed);
+    
+    // Reset jiffies counter
+    JIFFIES_COUNTER.store(0, Ordering::Relaxed);
+    
+    crate::info!("Time management initialized");
     Ok(())
 }
 
@@ -282,7 +297,10 @@ fn get_timer_wheel() -> &'static Spinlock<TimerWheel> {
         TIMER_WHEEL_INIT.store(true, Ordering::Release);
     }
     
-    unsafe { TIMER_WHEEL_STORAGE.as_ref().unwrap() }
+    #[allow(static_mut_refs)]
+    unsafe { 
+        TIMER_WHEEL_STORAGE.as_ref().unwrap()
+    }
 }
 
 /// Add a timer to the system

@@ -254,10 +254,12 @@ impl DeviceSubsystem {
         self.devices.remove(name).ok_or(Error::NotFound)
     }
     
+    #[allow(dead_code)]
     fn find_device(&self, name: &str) -> Option<&Device> {
         self.devices.get(name)
     }
     
+    #[allow(dead_code)]
     fn find_device_mut(&mut self, name: &str) -> Option<&mut Device> {
         self.devices.get_mut(name)
     }

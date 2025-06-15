@@ -29,6 +29,12 @@ pub enum Error {
     Device,
     /// Generic error
     Generic,
+    /// Invalid operation
+    InvalidOperation,
+    /// Timeout
+    Timeout,
+    /// Not initialized
+    NotInitialized,  // New error variant
     
     // Linux-compatible errno values
     /// Operation not permitted (EPERM)
@@ -59,6 +65,10 @@ pub enum Error {
     EEXIST,
     /// Directory not empty (ENOTEMPTY)
     ENOTEMPTY,
+    /// No child process (ECHILD)
+    ECHILD,
+    /// No such process (ESRCH)
+    ESRCH,
 }
 
 impl Error {
@@ -76,6 +86,9 @@ impl Error {
             Error::WouldBlock => -11,         // EAGAIN
             Error::Device => -19,             // ENODEV
             Error::Generic => -1,             // EPERM
+            Error::InvalidOperation => -1,    // EPERM
+            Error::Timeout => -110,           // ETIMEDOUT
+            Error::NotInitialized => -6,      // ENXIO
             
             // Linux errno mappings
             Error::EPERM => -1,               // EPERM
@@ -92,6 +105,8 @@ impl Error {
             Error::EISDIR => -21,             // EISDIR
             Error::EEXIST => -17,             // EEXIST
             Error::ENOTEMPTY => -39,          // ENOTEMPTY
+            Error::ECHILD => -10,             // ECHILD
+            Error::ESRCH => -3,               // ESRCH
         }
     }
 }
@@ -110,6 +125,9 @@ impl fmt::Display for Error {
             Error::WouldBlock => write!(f, "Resource temporarily unavailable"),
             Error::Device => write!(f, "Device error"),
             Error::Generic => write!(f, "Generic error"),
+            Error::InvalidOperation => write!(f, "Invalid operation"),
+            Error::Timeout => write!(f, "Operation timed out"),
+            Error::NotInitialized => write!(f, "Not initialized"),
             
             // Linux errno variants
             Error::EPERM => write!(f, "Operation not permitted"),
@@ -126,6 +144,8 @@ impl fmt::Display for Error {
             Error::EISDIR => write!(f, "Is a directory"),
             Error::EEXIST => write!(f, "File exists"),
             Error::ENOTEMPTY => write!(f, "Directory not empty"),
+            Error::ECHILD => write!(f, "No child processes"),
+            Error::ESRCH => write!(f, "No such process"),
         }
     }
 }

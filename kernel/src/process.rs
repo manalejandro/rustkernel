@@ -6,7 +6,7 @@ use crate::types::{Pid, Tid, Uid, Gid};
 use crate::error::{Error, Result};
 use crate::sync::Spinlock;
 use crate::memory::VirtAddr;
-use alloc::{string::String, vec::Vec, collections::BTreeMap};
+use alloc::{string::{String, ToString}, vec::Vec, collections::BTreeMap};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Process state - compatible with Linux kernel
@@ -70,6 +70,67 @@ impl Process {
     /// Check if process is running
     pub fn is_running(&self) -> bool {
         self.state == ProcessState::Running
+    }
+    
+    /// Fork the current process (create a copy)
+    pub fn fork(&self) -> Result<Process> {
+        let new_pid = allocate_pid();
+        let mut child = self.clone();
+        child.pid = new_pid;
+        child.parent = Some(self.pid);
+        child.state = ProcessState::Running;
+        
+        // TODO: Copy memory space (copy-on-write)
+        // TODO: Copy file descriptor table
+        // TODO: Set up new page tables
+        
+        Ok(child)
+    }
+    
+    /// Execute a new program in this process
+    pub fn exec(&mut self, program_path: &str, args: Vec<String>) -> Result<()> {
+        // TODO: Load program from filesystem
+        // TODO: Set up new memory layout
+        // TODO: Initialize stack with arguments
+        // TODO: Set entry point
+        
+        self.name = program_path.to_string();
+        Ok(())
+    }
+    
+    /// Terminate the process with given exit code
+    pub fn exit(&mut self, exit_code: i32) {
+        self.state = ProcessState::Zombie;
+        self.exit_code = exit_code;
+        
+        // TODO: Free memory
+        // TODO: Close file descriptors
+        // TODO: Notify parent
+        // TODO: Reparent children to init
+    }
+    
+    /// Send a signal to the process
+    pub fn send_signal(&mut self, signal: i32) -> Result<()> {
+        match signal {
+            9 => { // SIGKILL
+                self.state = ProcessState::Dead;
+            }
+            15 => { // SIGTERM
+                self.signal_pending = true;
+                // TODO: Add to signal queue
+            }
+            _ => {
+                // TODO: Handle other signals
+            }
+        }
+        Ok(())
+    }
+    
+    /// Wait for child processes
+    pub fn wait(&self) -> Result<(Pid, i32)> {
+        // TODO: Block until child exits
+        // TODO: Return child PID and exit status
+        Err(Error::ECHILD)
     }
 }
 
@@ -185,6 +246,7 @@ impl ProcessTable {
         self.processes.get_mut(&pid)
     }
     
+    #[allow(dead_code)]
     fn remove_process(&mut self, pid: Pid) -> Option<Process> {
         let process = self.processes.remove(&pid);
         if self.current_process == Some(pid) {
@@ -224,14 +286,24 @@ pub fn create_process(name: String, uid: Uid, gid: Gid) -> Result<Pid> {
     Ok(pid)
 }
 
-/// Get current process
-pub fn current_process() -> Option<Pid> {
+/// Get current process PID
+pub fn current_process_pid() -> Option<Pid> {
     let table = PROCESS_TABLE.lock();
     table.current_process
 }
 
+/// Get current process object
+pub fn current_process() -> Option<Process> {
+    let table = PROCESS_TABLE.lock();
+    if let Some(pid) = table.current_process {
+        table.get_process(pid).cloned()
+    } else {
+        None
+    }
+}
+
 /// Get process by PID
-pub fn get_process(pid: Pid) -> Option<Process> {
+pub fn find_process(pid: Pid) -> Option<Process> {
     let table = PROCESS_TABLE.lock();
     table.get_process(pid).cloned()
 }
@@ -252,6 +324,11 @@ pub fn kill_process(pid: Pid, signal: i32) -> Result<()> {
 pub fn list_processes() -> Vec<Pid> {
     let table = PROCESS_TABLE.lock();
     table.list_processes()
+}
+
+/// Initialize process management
+pub fn init_process_management() -> Result<()> {
+    init()
 }
 
 /// Initialize the process subsystem

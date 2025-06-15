@@ -264,6 +264,7 @@ impl DriverSubsystem {
         }
     }
     
+    #[allow(dead_code)]
     fn find_driver(&self, name: &str) -> Option<&dyn Driver> {
         self.drivers.get(name).map(|d| d.as_ref())
     }

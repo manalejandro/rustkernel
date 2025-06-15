@@ -2,8 +2,8 @@
 
 //! Superblock abstraction - Linux compatible
 
-use crate::error::{Error, Result};
-use crate::sync::{Arc, Mutex, RwLock};
+use crate::error::Result;
+use crate::sync::{Arc, Mutex};
 use crate::device::DeviceNumber;
 use alloc::string::String;
 use alloc::vec::Vec;

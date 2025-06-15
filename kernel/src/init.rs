@@ -2,7 +2,6 @@
 
 //! Kernel initialization
 
-use crate::error::Result;
 use crate::{info, error};
 
 /// Early kernel initialization
@@ -58,6 +57,33 @@ pub fn main_init() -> ! {
     }
     info!("VFS initialized");
     
+    // Initialize process management
+    if let Err(e) = crate::process::init_process_management() {
+        error!("Failed to initialize process management: {}", e);
+        panic!("Process management initialization failed");
+    }
+    info!("Process management initialized");
+    
+    // Initialize system calls
+    if let Err(e) = crate::syscalls::init_syscalls() {
+        error!("Failed to initialize syscalls: {}", e);
+        panic!("Syscall initialization failed");
+    }
+    info!("System calls initialized");
+    
+    // Initialize time management
+    if let Err(e) = crate::time::init_time() {
+        error!("Failed to initialize time management: {}", e);
+        panic!("Time management initialization failed");
+    }
+    info!("Time management initialized");
+    
+    // TODO: Initialize drivers
+    // init_drivers();
+    
+    // TODO: Start kernel threads
+    // start_kernel_threads();
+
     info!("Kernel initialization completed");
     info!("Starting idle loop");
     

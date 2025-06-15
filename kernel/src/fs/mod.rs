@@ -18,14 +18,11 @@ pub mod devfs;
 pub mod mode;  // Add mode module
 
 use crate::error::{Error, Result};
-use crate::types::*;
-use crate::sync::{Arc, Mutex, RwLock};
+use crate::sync::{Arc, Mutex};
 use crate::memory::{UserPtr, UserSlicePtr};
-use crate::device::DeviceNumber;
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::collections::BTreeMap;
-use core::fmt;
 
 pub use file::*;
 pub use inode::*;

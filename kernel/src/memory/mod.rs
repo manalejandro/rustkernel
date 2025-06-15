@@ -12,7 +12,6 @@ pub use page::Page;
 pub use crate::types::{PhysAddr, VirtAddr, Pfn};  // Re-export from types
 
 use crate::error::{Error, Result};
-use core::alloc::{GlobalAlloc, Layout};
 use linked_list_allocator::LockedHeap;
 
 /// GFP (Get Free Pages) flags - compatible with Linux kernel

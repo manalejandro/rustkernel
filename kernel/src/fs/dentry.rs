@@ -2,8 +2,8 @@
 
 //! Directory entry (dentry) abstraction - Linux compatible
 
-use crate::error::{Error, Result};
-use crate::sync::{Arc, Mutex, RwLock};
+use crate::error::Result;
+use crate::sync::{Arc, Mutex};
 use alloc::{string::String, vec::Vec, format};  // Add format macro
 use core::sync::atomic::{AtomicU32, Ordering};
 

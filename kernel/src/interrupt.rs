@@ -4,9 +4,9 @@
 
 use crate::error::{Error, Result};
 use crate::sync::Spinlock;
-use crate::types::Irq;
-use alloc::{vec::Vec, collections::BTreeMap, boxed::Box};  // Add Box import
+use alloc::{collections::BTreeMap, boxed::Box};  // Add Box import
 use core::fmt;
+use core::arch::asm;
 
 /// IRQ flags - compatible with Linux kernel
 pub mod irq_flags {
@@ -155,6 +155,7 @@ impl InterruptSubsystem {
         self.descriptors.get_mut(&irq)
     }
     
+    #[allow(dead_code)]
     fn get_descriptor(&self, irq: u32) -> Option<&IrqDescriptor> {
         self.descriptors.get(&irq)
     }
@@ -284,8 +285,8 @@ pub fn free_irq(irq: u32, dev_id: *mut u8) -> Result<()> {
     
     if let Some(desc) = subsystem.get_descriptor_mut(irq) {
         // Remove action with matching dev_id
-        let mut prev: Option<&mut Box<IrqAction>> = None;
-        let mut current = &mut desc.action;
+        let prev: Option<&mut Box<IrqAction>> = None;
+        let current = &mut desc.action;
         let mut found = false;
         
         // Handle first element specially
@@ -365,59 +366,39 @@ pub fn disable_irq(irq: u32) -> Result<()> {
     }
 }
 
-/// Handle an interrupt - called from low-level interrupt handlers
-pub fn handle_interrupt(irq: u32) {
-    let mut subsystem = INTERRUPT_SUBSYSTEM.lock();
+/// Register an interrupt handler at a specific vector
+pub fn register_interrupt_handler(vector: u32, handler: usize) -> Result<()> {
+    // TODO: Implement IDT (Interrupt Descriptor Table) setup
+    // For now, this is a placeholder that would:
+    // 1. Set up IDT entry for the given vector
+    // 2. Install the handler function
+    // 3. Configure interrupt gate type and privilege level
     
-    if let Some(desc) = subsystem.get_descriptor_mut(irq) {
-        desc.irq_count += 1;
-        
-        if !desc.is_enabled() {
-            // Interrupt is disabled, shouldn't happen
-            crate::warn!("Received disabled interrupt {}", irq);
-            return;
-        }
-        
-        // Call all handlers in the action chain
-        let mut current = desc.action.as_ref();
-        let mut handled = false;
-        
-        while let Some(action) = current {
-            let result = (action.handler)(irq, action.dev_id.as_ptr());
-            match result {
-                IrqReturn::Handled => {
-                    handled = true;
-                }
-                IrqReturn::WakeThread => {
-                    handled = true;
-                    // TODO: Wake threaded interrupt handler
-                }
-                IrqReturn::None => {
-                    // Handler didn't handle this interrupt
-                }
-            }
-            current = action.next.as_ref();
-        }
-        
-        if !handled {
-            desc.irqs_unhandled += 1;
-            if desc.irqs_unhandled > 100 {
-                crate::warn!("Too many unhandled interrupts on IRQ {}", irq);
-            }
-        }
-    } else {
-        crate::warn!("Spurious interrupt {}", irq);
+    crate::info!("Registering interrupt handler at vector 0x{:x} -> 0x{:x}", vector, handler);
+    
+    // In a real implementation, this would configure the IDT
+    // For x86_64, this involves setting up interrupt gates in the IDT
+    Ok(())
+}
+
+/// System call interrupt handler
+#[no_mangle]
+pub extern "C" fn syscall_handler() {
+    // TODO: Get syscall arguments from registers
+    // TODO: Call syscall dispatcher
+    // TODO: Return result in register
+    
+    // For now, just a placeholder
+    unsafe {
+        asm!("iretq", options(noreturn));
     }
 }
 
-/// Get interrupt statistics
-pub fn get_irq_stats() -> Vec<(u32, &'static str, u64, u64)> {
-    let subsystem = INTERRUPT_SUBSYSTEM.lock();
-    let mut stats = Vec::new();
+/// Install syscall interrupt handler
+pub fn install_syscall_handler() -> Result<()> {
+    // Install at interrupt vector 0x80 (traditional Linux syscall vector)
+    register_interrupt_handler(0x80, syscall_handler as usize)?;
     
-    for (irq, desc) in &subsystem.descriptors {
-        stats.push((*irq, desc.name, desc.irq_count, desc.irqs_unhandled));
-    }
-    
-    stats
+    // TODO: Also set up SYSCALL/SYSRET for x86_64
+    Ok(())
 }

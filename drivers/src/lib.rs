@@ -12,6 +12,8 @@ pub mod dummy;
 pub mod mem;
 pub mod platform_example;
 pub mod ramdisk;
+pub mod keyboard; // New keyboard driver
+pub mod serial;   // New serial driver
 
 pub use dummy::*;
 pub use mem::*;

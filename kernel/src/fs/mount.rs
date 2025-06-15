@@ -3,7 +3,7 @@
 //! VFS mount abstraction - Linux compatible
 
 use crate::error::{Error, Result};
-use crate::sync::{Arc, Mutex, RwLock};
+use crate::sync::{Arc, Mutex};
 use alloc::{string::String, vec::Vec, format};  // Add format macro
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -215,7 +215,7 @@ pub fn do_mount(
     let mount = Arc::new(VfsMount::new(sb, dir_name, flags)?);
     
     let ns = get_init_ns();
-    let mut ns = ns.lock();
+    let ns = ns.lock();
     ns.add_mount(mount);
     
     crate::console::print_info(&format!("Mounted {} on {} (type {})\n", dev_name, dir_name, type_name));
@@ -225,7 +225,7 @@ pub fn do_mount(
 /// Unmount a filesystem
 pub fn do_umount(dir_name: &str, flags: u32) -> Result<()> {
     let ns = get_init_ns();
-    let mut ns = ns.lock();
+    let ns = ns.lock();
     
     if let Some(mount) = ns.remove_mount(dir_name) {
         mount.mntput();
@@ -281,7 +281,7 @@ pub fn do_remount(dir_name: &str, flags: u32, data: Option<&str>) -> Result<()> 
 /// Bind mount - create a bind mount
 pub fn do_bind_mount(old_path: &str, new_path: &str, flags: u32) -> Result<()> {
     let ns = get_init_ns();
-    let mut ns = ns.lock();
+    let ns = ns.lock();
     
     if let Some(old_mount) = ns.find_mount(old_path) {
         let new_mount = Arc::new(VfsMount::new(old_mount.mnt_sb.clone(), new_path, flags | super::super_block::MS_BIND)?);
