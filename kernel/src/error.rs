@@ -35,7 +35,11 @@ pub enum Error {
     Timeout,
     /// Not initialized
     NotInitialized,  // New error variant
-    
+    /// Network unreachable
+    NetworkUnreachable,
+    /// Device not found
+    DeviceNotFound,
+
     // Linux-compatible errno values
     /// Operation not permitted (EPERM)
     EPERM,
@@ -107,6 +111,8 @@ impl Error {
             Error::ENOTEMPTY => -39,          // ENOTEMPTY
             Error::ECHILD => -10,             // ECHILD
             Error::ESRCH => -3,               // ESRCH
+            Error::NetworkUnreachable => -101, // ENETUNREACH
+            Error::DeviceNotFound => -19,     // ENODEV
         }
     }
 }
@@ -128,6 +134,8 @@ impl fmt::Display for Error {
             Error::InvalidOperation => write!(f, "Invalid operation"),
             Error::Timeout => write!(f, "Operation timed out"),
             Error::NotInitialized => write!(f, "Not initialized"),
+            Error::NetworkUnreachable => write!(f, "Network unreachable"),
+            Error::DeviceNotFound => write!(f, "Device not found"),
             
             // Linux errno variants
             Error::EPERM => write!(f, "Operation not permitted"),

@@ -142,6 +142,10 @@ pub const DT_WHT: u8 = 14;
 /// Global VFS state
 static VFS: Mutex<Vfs> = Mutex::new(Vfs::new());
 
+/// Global file descriptor table (simplified - in reality this would be per-process)
+static GLOBAL_FD_TABLE: Mutex<BTreeMap<i32, Arc<File>>> = Mutex::new(BTreeMap::new());
+static NEXT_FD: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(3); // Start after stdin/stdout/stderr
+
 /// Virtual File System state
 pub struct Vfs {
     /// Mounted filesystems
@@ -222,6 +226,73 @@ pub fn init() -> Result<()> {
     mount::do_mount("devfs", "/dev", "devfs", 0, None)?;
     
     crate::console::print_info("VFS: Initialized virtual file system\n");
+    Ok(())
+}
+
+/// Get a file descriptor from the table
+pub fn get_file_descriptor(fd: i32) -> Option<Arc<File>> {
+    let table = GLOBAL_FD_TABLE.lock();
+    table.get(&fd).cloned()
+}
+
+/// Allocate a new file descriptor
+pub fn allocate_file_descriptor(file: Arc<File>) -> Result<i32> {
+    let fd = NEXT_FD.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
+    let mut table = GLOBAL_FD_TABLE.lock();
+    table.insert(fd, file);
+    Ok(fd)
+}
+
+/// Close a file descriptor
+pub fn close_file_descriptor(fd: i32) -> Result<()> {
+    let mut table = GLOBAL_FD_TABLE.lock();
+    table.remove(&fd).ok_or(Error::EBADF)?;
+    Ok(())
+}
+
+/// Open a file
+pub fn open_file(path: &str, flags: i32, mode: u32) -> Result<Arc<File>> {
+    // For now, create a simple file structure
+    // In a full implementation, this would:
+    // 1. Parse the path
+    // 2. Walk the directory tree
+    // 3. Check permissions
+    // 4. Create inode/dentry structures
+    // 5. Return file handle
+    
+    let file = File::new(path, flags as u32, mode)?;
+    
+    Ok(Arc::new(file))
+}
+
+/// Read from a file
+pub fn read_file(file: &Arc<File>, buf: &mut [u8]) -> Result<usize> {
+    if let Some(ops) = &file.f_op {
+        // Create a UserSlicePtr from the buffer for the interface
+        let user_slice = unsafe { UserSlicePtr::new(buf.as_mut_ptr(), buf.len()) };
+        let result = ops.read(file, user_slice, buf.len())?;
+        Ok(result as usize)
+    } else {
+        Err(Error::ENOSYS)
+    }
+}
+
+/// Write to a file
+pub fn write_file(file: &Arc<File>, buf: &[u8]) -> Result<usize> {
+    if let Some(ops) = &file.f_op {
+        // Create a UserSlicePtr from the buffer for the interface
+        let user_slice = unsafe { UserSlicePtr::new(buf.as_ptr() as *mut u8, buf.len()) };
+        let result = ops.write(file, user_slice, buf.len())?;
+        Ok(result as usize)
+    } else {
+        Err(Error::ENOSYS)
+    }
+}
+
+/// Initialize VFS
+pub fn init_vfs() -> Result<()> {
+    // Initialize filesystems - just initialize the VFS, not individual filesystems
+    crate::info!("VFS initialized");
     Ok(())
 }
 

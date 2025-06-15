@@ -99,7 +99,7 @@ impl HrTimer {
     
     pub fn is_expired(&self) -> bool {
         let now = match self.base {
-            HrTimerBase::Monotonic => get_monotonic_time(),
+            HrTimerBase::Monotonic => monotonic_time(),
             HrTimerBase::Realtime => get_realtime(),
             HrTimerBase::Boottime => get_boottime(),
             HrTimerBase::Tai => get_realtime(), // Simplified
@@ -160,9 +160,18 @@ pub fn get_time_ns() -> u64 {
     get_jiffies().0 * NSEC_PER_JIFFY
 }
 
+/// Get high resolution time
+pub fn ktime_get() -> TimeSpec {
+    // TODO: Read from high-resolution clock source (TSC, etc.)
+    // For now, return monotonic time based on jiffies
+    get_current_time()
+}
+
 /// Get monotonic time (time since boot)
-pub fn get_monotonic_time() -> TimeSpec {
-    TimeSpec::from_ns(get_time_ns())
+pub fn monotonic_time() -> TimeSpec {
+    let jiffies = get_jiffies();
+    let ns = jiffies.0 * NSEC_PER_JIFFY;
+    TimeSpec::from_ns(ns)
 }
 
 /// Get boot time

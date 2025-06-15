@@ -95,55 +95,91 @@ pub fn handle_syscall(args: SyscallArgs) -> u64 {
 
 /// Process management syscalls
 pub fn sys_fork() -> Result<u64> {
-    // TODO: Implement fork
-    // 1. Allocate new PID
-    // 2. Copy current process
-    // 3. Set up copy-on-write memory
-    // 4. Add to scheduler
-    // 5. Return child PID to parent, 0 to child
+    use crate::process::create_process;
+    use crate::scheduler::add_task;
     
-    let new_pid = allocate_pid();
-    // For now, just return the new PID
-    Ok(new_pid.0 as u64)
+    // Get current process
+    let current = current_process().ok_or(Error::ESRCH)?;
+    
+    // Fork the process
+    let child = current.fork()?;
+    let child_pid = child.pid;
+    
+    // Add child to process table and scheduler
+    let mut table = crate::process::PROCESS_TABLE.lock();
+    table.add_process(child.clone());
+    drop(table);
+    
+    // Add to scheduler
+    add_task(child_pid)?;
+    
+    // Return child PID to parent (in child, this would return 0)
+    Ok(child_pid.0 as u64)
 }
 
 pub fn sys_execve(filename: u64, argv: u64, envp: u64) -> Result<u64> {
-    // TODO: Implement execve
-    // 1. Load program from filesystem
-    // 2. Set up new memory layout
-    // 3. Parse arguments and environment
-    // 4. Set up initial stack
-    // 5. Jump to entry point
+    use crate::memory::{copy_string_from_user, UserPtr};
     
-    Err(Error::ENOSYS)
+    // Copy filename from user space
+    let user_ptr = UserPtr::from_const(filename as *const u8)?;
+    let filename_str = copy_string_from_user(user_ptr, 256)?;
+    
+    // Get current process
+    let mut current = current_process().ok_or(Error::ESRCH)?;
+    
+    // Execute new program (with empty args for now)
+    current.exec(&filename_str, alloc::vec![])?;
+    
+    // This doesn't return on success
+    Ok(0)
 }
 
 pub fn sys_exit(exit_code: i32) -> Result<u64> {
-    // TODO: Implement exit
-    // 1. Set process state to zombie
-    // 2. Free resources
-    // 3. Notify parent
-    // 4. Schedule next process
+    use crate::scheduler::remove_task;
+    
+    // Get current process
+    if let Some(mut current) = current_process() {
+        // Set exit code and mark as zombie
+        current.exit(exit_code);
+        
+        // Remove from scheduler
+        let _ = remove_task(current.pid);
+        
+        // In a real implementation, this would:
+        // 1. Free all process resources
+        // 2. Notify parent process
+        // 3. Reparent children to init
+        // 4. Schedule next process
+        
+        // Signal scheduler to switch to next process
+        crate::scheduler::schedule();
+    }
     
     // This syscall doesn't return
-    panic!("Process exit with code {}", exit_code);
+    loop {
+        unsafe { core::arch::asm!("hlt") };
+    }
 }
 
 pub fn sys_wait4(pid: u64, status: u64, options: u64, rusage: u64) -> Result<u64> {
-    // TODO: Implement wait4
-    // 1. Find child process
-    // 2. Block until child exits
-    // 3. Return child PID and status
+    use crate::memory::{copy_to_user, UserPtr};
     
-    Err(Error::ECHILD)
+    // Get current process
+    let current = current_process().ok_or(Error::ESRCH)?;
+    
+    // Wait for child process
+    let (child_pid, exit_status) = current.wait()?;
+    
+    // If status pointer is provided, write exit status
+    if status != 0 {
+        let status_ptr = UserPtr::new(status as *mut i32)?;
+        copy_to_user(status_ptr.cast(), &exit_status.to_ne_bytes())?;
+    }
+    
+    Ok(child_pid.0 as u64)
 }
 
 pub fn sys_kill(pid: i32, signal: i32) -> Result<u64> {
-    // TODO: Implement kill
-    // 1. Find target process
-    // 2. Send signal
-    // 3. Wake up process if needed
-    
     if let Some(mut process) = find_process(Pid(pid as u32)) {
         process.send_signal(signal)?;
         Ok(0)
@@ -179,77 +215,176 @@ pub fn sys_gettid() -> u32 {
 
 /// File operation syscalls
 pub fn sys_read(fd: i32, buf: u64, count: u64) -> Result<u64> {
-    // TODO: Implement read
-    // 1. Get file from file descriptor table
-    // 2. Read from file
-    // 3. Copy to user buffer
+    use crate::memory::{copy_to_user, UserPtr};
+    use crate::fs::{get_file_descriptor, read_file};
     
-    Err(Error::ENOSYS)
+    // Validate parameters
+    if count == 0 {
+        return Ok(0);
+    }
+    
+    // Get file from file descriptor table
+    let file = get_file_descriptor(fd).ok_or(Error::EBADF)?;
+    
+    // Create a kernel buffer to read into
+    let mut kernel_buf = alloc::vec![0u8; count as usize];
+    
+    // Read from file
+    let bytes_read = read_file(&file, &mut kernel_buf)?;
+    
+    // Copy to user buffer
+    let user_ptr = UserPtr::new(buf as *mut u8)?;
+    copy_to_user(user_ptr, &kernel_buf[..bytes_read])?;
+    
+    Ok(bytes_read as u64)
 }
 
 pub fn sys_write(fd: i32, buf: u64, count: u64) -> Result<u64> {
-    // TODO: Implement write
-    // 1. Get file from file descriptor table
-    // 2. Copy from user buffer
-    // 3. Write to file
+    use crate::memory::{copy_from_user, UserPtr};
+    use crate::fs::{get_file_descriptor, write_file};
     
-    if fd == 1 || fd == 2 { // stdout or stderr
-        // For now, just return the count as if we wrote to console
-        Ok(count)
-    } else {
-        Err(Error::EBADF)
+    // Validate parameters
+    if count == 0 {
+        return Ok(0);
     }
+    
+    // Handle stdout/stderr specially for now
+    if fd == 1 || fd == 2 {
+        // Create kernel buffer and copy from user
+        let mut kernel_buf = alloc::vec![0u8; count as usize];
+        let user_ptr = UserPtr::from_const(buf as *const u8)?;
+        copy_from_user(&mut kernel_buf, user_ptr)?;
+        
+        // Write to console (for debugging)
+        if let Ok(s) = core::str::from_utf8(&kernel_buf) {
+            crate::print!("{}", s);
+        }
+        
+        return Ok(count);
+    }
+    
+    // Get file from file descriptor table
+    let file = get_file_descriptor(fd).ok_or(Error::EBADF)?;
+    
+    // Create kernel buffer and copy from user
+    let mut kernel_buf = alloc::vec![0u8; count as usize];
+    let user_ptr = UserPtr::from_const(buf as *const u8)?;
+    copy_from_user(&mut kernel_buf, user_ptr)?;
+    
+    // Write to file
+    let bytes_written = write_file(&file, &kernel_buf)?;
+    
+    Ok(bytes_written as u64)
 }
 
 pub fn sys_open(filename: u64, flags: i32, mode: u32) -> Result<u64> {
-    // TODO: Implement open
-    // 1. Copy filename from user space
-    // 2. Open file in VFS
-    // 3. Allocate file descriptor
-    // 4. Add to process file table
+    use crate::memory::{copy_string_from_user, UserPtr};
+    use crate::fs::{open_file, allocate_file_descriptor};
     
-    Err(Error::ENOSYS)
+    // Copy filename from user space
+    let user_ptr = UserPtr::from_const(filename as *const u8)?;
+    let filename_str = copy_string_from_user(user_ptr, 256)?; // Max 256 chars
+    
+    // Open file in VFS
+    let file = open_file(&filename_str, flags, mode)?;
+    
+    // Allocate file descriptor and add to process file table
+    let fd = allocate_file_descriptor(file)?;
+    
+    Ok(fd as u64)
 }
 
 pub fn sys_close(fd: i32) -> Result<u64> {
-    // TODO: Implement close
-    // 1. Get file from file descriptor table
-    // 2. Remove from table
-    // 3. Close file
+    use crate::fs::close_file_descriptor;
     
-    Err(Error::ENOSYS)
+    // Close file descriptor
+    close_file_descriptor(fd)?;
+    
+    Ok(0)
 }
 
 /// Memory management syscalls
 pub fn sys_mmap(addr: u64, length: u64, prot: i32, flags: i32, fd: i32, offset: i64) -> Result<u64> {
-    // TODO: Implement mmap
-    // 1. Validate parameters
-    // 2. Find free virtual memory region
-    // 3. Create VMA
-    // 4. Set up page tables
-    // 5. Return mapped address
+    use crate::memory::{allocate_virtual_memory, VmaArea, VirtAddr};
     
-    Err(Error::ENOSYS)
+    // Validate parameters
+    if length == 0 {
+        return Err(Error::EINVAL);
+    }
+    
+    // Align length to page boundary
+    let page_size = 4096u64;
+    let aligned_length = (length + page_size - 1) & !(page_size - 1);
+    
+    // Allocate virtual memory region
+    let vma = if addr == 0 {
+        // Let kernel choose address
+        allocate_virtual_memory(aligned_length, prot as u32, flags as u32)?
+    } else {
+        // Use specified address (with validation)
+        let virt_addr = VirtAddr::new(addr as usize);
+        let vma = VmaArea::new(virt_addr, VirtAddr::new((addr + aligned_length) as usize), prot as u32);
+        
+        // TODO: Validate that the address range is available
+        // TODO: Set up page tables
+        
+        vma
+    };
+    
+    // Handle file mapping
+    if fd >= 0 {
+        // TODO: Map file into memory
+        // This would involve getting the file from fd and setting up file-backed pages
+    }
+    
+    Ok(vma.vm_start.as_usize() as u64)
 }
 
 pub fn sys_munmap(addr: u64, length: u64) -> Result<u64> {
-    // TODO: Implement munmap
-    // 1. Find VMA containing address
-    // 2. Unmap pages
-    // 3. Free physical memory
-    // 4. Remove VMA
+    use crate::memory::{free_virtual_memory, VirtAddr};
     
-    Err(Error::ENOSYS)
+    // Validate parameters
+    if length == 0 {
+        return Err(Error::EINVAL);
+    }
+    
+    // Align to page boundaries
+    let page_size = 4096u64;
+    let aligned_addr = addr & !(page_size - 1);
+    let aligned_length = (length + page_size - 1) & !(page_size - 1);
+    
+    // Free virtual memory region
+    free_virtual_memory(VirtAddr::new(aligned_addr as usize), aligned_length)?;
+    
+    Ok(0)
 }
 
 pub fn sys_brk(addr: u64) -> Result<u64> {
-    // TODO: Implement brk
-    // 1. Get current heap end
-    // 2. Validate new address
-    // 3. Expand or shrink heap
-    // 4. Return new heap end
+    use crate::memory::{get_heap_end, set_heap_end, VirtAddr};
     
-    Err(Error::ENOSYS)
+    // Get current heap end
+    let current_brk = get_heap_end();
+    
+    if addr == 0 {
+        // Return current heap end
+        return Ok(current_brk.as_usize() as u64);
+    }
+    
+    let new_brk = VirtAddr::new(addr as usize);
+    
+    // Validate new address
+    if new_brk < current_brk {
+        // Shrinking heap - free pages
+        // TODO: Free pages between new_brk and current_brk
+    } else if new_brk > current_brk {
+        // Expanding heap - allocate pages
+        // TODO: Allocate pages between current_brk and new_brk
+    }
+    
+    // Update heap end
+    set_heap_end(new_brk)?;
+    
+    Ok(new_brk.as_usize() as u64)
 }
 
 /// Architecture-specific syscall entry point

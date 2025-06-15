@@ -4,6 +4,7 @@
 
 pub mod allocator;
 pub mod page;
+pub mod page_table;
 pub mod vmalloc;
 pub mod kmalloc;
 
@@ -12,6 +13,7 @@ pub use page::Page;
 pub use crate::types::{PhysAddr, VirtAddr, Pfn};  // Re-export from types
 
 use crate::error::{Error, Result};
+use alloc::string::String;
 use linked_list_allocator::LockedHeap;
 
 /// GFP (Get Free Pages) flags - compatible with Linux kernel
@@ -238,14 +240,28 @@ pub struct UserPtr<T> {
 }
 
 impl<T> UserPtr<T> {
-    /// Create a new UserPtr (unsafe as it's not validated)
-    pub unsafe fn new(ptr: *mut T) -> Self {
-        Self { ptr }
+    /// Create a new UserPtr with validation
+    pub fn new(ptr: *mut T) -> Result<Self> {
+        if ptr.is_null() {
+            return Err(Error::InvalidArgument);
+        }
+        // TODO: Add proper user space validation
+        Ok(Self { ptr })
+    }
+    
+    /// Create a new UserPtr from const pointer
+    pub fn from_const(ptr: *const T) -> Result<Self> {
+        Self::new(ptr as *mut T)
     }
     
     /// Get the raw pointer
     pub fn as_ptr(&self) -> *mut T {
         self.ptr
+    }
+    
+    /// Cast to different type
+    pub fn cast<U>(&self) -> UserPtr<U> {
+        UserPtr { ptr: self.ptr as *mut U }
     }
     
     /// Check if the pointer is null
@@ -333,6 +349,105 @@ impl UserSlicePtr {
         }
         Ok(())
     }
+}
+
+/// Copy data to user space
+pub fn copy_to_user(user_ptr: UserPtr<u8>, data: &[u8]) -> Result<()> {
+    // TODO: Implement proper user space access validation
+    // This should check if the user pointer is valid and accessible
+    
+    if user_ptr.ptr.is_null() {
+        return Err(Error::InvalidArgument);
+    }
+    
+    // In a real kernel, this would use proper copy_to_user with page fault handling
+    // For now, we'll use unsafe direct copy (NOT safe for real use)
+    unsafe {
+        core::ptr::copy_nonoverlapping(data.as_ptr(), user_ptr.ptr, data.len());
+    }
+    Ok(())
+}
+
+/// Copy data from user space
+pub fn copy_from_user(data: &mut [u8], user_ptr: UserPtr<u8>) -> Result<()> {
+    // TODO: Implement proper user space access validation
+    // This should check if the user pointer is valid and accessible
+    
+    if user_ptr.ptr.is_null() {
+        return Err(Error::InvalidArgument);
+    }
+    
+    // In a real kernel, this would use proper copy_from_user with page fault handling
+    // For now, we'll use unsafe direct copy (NOT safe for real use)
+    unsafe {
+        core::ptr::copy_nonoverlapping(user_ptr.ptr, data.as_mut_ptr(), data.len());
+    }
+    Ok(())
+}
+
+/// Copy a string from user space
+pub fn copy_string_from_user(user_ptr: UserPtr<u8>, max_len: usize) -> Result<String> {
+    // TODO: Implement proper user space access validation
+    
+    if user_ptr.ptr.is_null() {
+        return Err(Error::InvalidArgument);
+    }
+    
+    let mut buffer = alloc::vec![0u8; max_len];
+    let mut len = 0;
+    
+    // Copy byte by byte until null terminator or max length
+    unsafe {
+        for i in 0..max_len {
+            let byte = *user_ptr.ptr.add(i);
+            if byte == 0 {
+                break;
+            }
+            buffer[i] = byte;
+            len += 1;
+        }
+    }
+    
+    buffer.truncate(len);
+    String::from_utf8(buffer).map_err(|_| Error::InvalidArgument)
+}
+
+/// Global heap management
+static HEAP_START: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0x40000000); // Start at 1GB
+static HEAP_END: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0x40000000);
+
+/// Allocate virtual memory region
+pub fn allocate_virtual_memory(size: u64, prot: u32, flags: u32) -> Result<VmaArea> {
+    // Simple allocator - in reality this would be much more sophisticated
+    let start = HEAP_END.fetch_add(size as usize, core::sync::atomic::Ordering::SeqCst);
+    let end = start + size as usize;
+    
+    let vma = VmaArea::new(VirtAddr::new(start), VirtAddr::new(end), prot);
+    
+    // TODO: Set up page tables for the VMA
+    // TODO: Handle different protection flags
+    
+    Ok(vma)
+}
+
+/// Free virtual memory region
+pub fn free_virtual_memory(addr: VirtAddr, size: u64) -> Result<()> {
+    // TODO: Find and remove VMA
+    // TODO: Free page tables
+    // TODO: Free physical pages
+    
+    Ok(())
+}
+
+/// Get current heap end
+pub fn get_heap_end() -> VirtAddr {
+    VirtAddr::new(HEAP_END.load(core::sync::atomic::Ordering::SeqCst))
+}
+
+/// Set heap end
+pub fn set_heap_end(addr: VirtAddr) -> Result<()> {
+    HEAP_END.store(addr.as_usize(), core::sync::atomic::Ordering::SeqCst);
+    Ok(())
 }
 
 /// Virtual memory area - similar to Linux vm_area_struct

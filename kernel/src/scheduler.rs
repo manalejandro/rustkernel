@@ -6,6 +6,8 @@ use crate::error::{Error, Result};
 use crate::types::Tid;
 use crate::sync::Spinlock;
 use crate::time;
+use crate::arch::x86_64::context::{Context, switch_context};
+use crate::process::{PROCESS_TABLE, Thread};
 use alloc::{collections::{BTreeMap, VecDeque}, vec::Vec};
 use core::sync::atomic::{AtomicU64, Ordering};
 
@@ -204,93 +206,51 @@ impl CfsRunQueue {
         }
     }
     
-    /// Check if run queue is empty
-    pub fn is_empty(&self) -> bool {
-        self.nr_running == 0
+    /// Update minimum virtual runtime
+    pub fn update_min_vruntime(&mut self) {
+        if let Some((&next_vruntime, _)) = self.tasks_timeline.iter().next() {
+            self.min_vruntime = core::cmp::max(self.min_vruntime, next_vruntime);
+        }
     }
 }
 
-/// Real-time run queue (for FIFO/RR scheduling)
+/// Real-time run queue  
 #[derive(Debug)]
 pub struct RtRunQueue {
-    active: [VecDeque<SchedEntity>; MAX_RT_PRIO as usize],
-    rt_nr_running: u32,
-    highest_prio: i32,
+    runqueue: VecDeque<SchedEntity>,
+    nr_running: u32,
 }
 
 impl RtRunQueue {
-    pub fn new() -> Self {
-        const EMPTY_QUEUE: VecDeque<SchedEntity> = VecDeque::new();
+    pub const fn new() -> Self {
         Self {
-            active: [EMPTY_QUEUE; MAX_RT_PRIO as usize],
-            rt_nr_running: 0,
-            highest_prio: MAX_RT_PRIO,
+            runqueue: VecDeque::new(),
+            nr_running: 0,
         }
     }
     
     pub fn enqueue_task(&mut self, se: SchedEntity) {
-        let prio = se.priority as usize;
-        if prio < MAX_RT_PRIO as usize {
-            self.active[prio].push_back(se);
-            self.rt_nr_running += 1;
-            if (prio as i32) < self.highest_prio {
-                self.highest_prio = prio as i32;
-            }
-        }
+        self.runqueue.push_back(se);
+        self.nr_running += 1;
     }
     
     pub fn dequeue_task(&mut self, se: &SchedEntity) -> bool {
-        let prio = se.priority as usize;
-        if prio < MAX_RT_PRIO as usize {
-            if let Some(pos) = self.active[prio].iter().position(|x| x.tid == se.tid) {
-                self.active[prio].remove(pos);
-                self.rt_nr_running -= 1;
-                
-                // Update highest_prio if this queue is now empty
-                if self.active[prio].is_empty() && prio as i32 == self.highest_prio {
-                    self.update_highest_prio();
-                }
-                return true;
-            }
+        if let Some(pos) = self.runqueue.iter().position(|task| task.tid == se.tid) {
+            self.nr_running -= 1;
+            self.runqueue.remove(pos);
+            true
+        } else {
+            false
         }
-        false
     }
     
     pub fn pick_next_task(&mut self) -> Option<SchedEntity> {
-        if self.rt_nr_running > 0 {
-            for prio in self.highest_prio as usize..MAX_RT_PRIO as usize {
-                if let Some(se) = self.active[prio].pop_front() {
-                    self.rt_nr_running -= 1;
-                    
-                    // For round-robin, re-enqueue at the end
-                    if se.policy == SchedulerPolicy::RoundRobin {
-                        self.active[prio].push_back(se.clone());
-                        self.rt_nr_running += 1;
-                    }
-                    
-                    if self.active[prio].is_empty() && prio as i32 == self.highest_prio {
-                        self.update_highest_prio();
-                    }
-                    
-                    return Some(se);
-                }
-            }
+        if self.nr_running > 0 {
+            self.nr_running -= 1;
+            self.runqueue.pop_front()
+        } else {
+            None
         }
-        None
-    }
-    
-    fn update_highest_prio(&mut self) {
-        self.highest_prio = MAX_RT_PRIO;
-        for prio in 0..MAX_RT_PRIO as usize {
-            if !self.active[prio].is_empty() {
-                self.highest_prio = prio as i32;
-                break;
-            }
-        }
-    }
-    
-    pub fn is_empty(&self) -> bool {
-        self.rt_nr_running == 0
     }
 }
 
@@ -391,6 +351,10 @@ struct Scheduler {
     nr_cpus: u32,
     entities: BTreeMap<Tid, SchedEntity>,
     need_resched: bool,
+    cfs: CfsRunQueue,
+    rt: RtRunQueue,
+    current: Option<Tid>,
+    nr_switches: u64,
 }
 
 impl Scheduler {
@@ -400,6 +364,19 @@ impl Scheduler {
             nr_cpus: 1, // Single CPU for now
             entities: BTreeMap::new(),
             need_resched: false,
+            cfs: CfsRunQueue {
+                tasks_timeline: BTreeMap::new(),
+                min_vruntime: 0,
+                nr_running: 0,
+                load_weight: 0,
+                runnable_weight: 0,
+            },
+            rt: RtRunQueue {
+                runqueue: VecDeque::new(),
+                nr_running: 0,
+            },
+            current: None,
+            nr_switches: 0,
         }
     }
     
@@ -453,12 +430,62 @@ impl Scheduler {
         None
     }
     
-    fn set_need_resched(&mut self) {
-        self.need_resched = true;
+    /// Pick next task to run
+    fn pick_next_task(&mut self) -> Option<Tid> {
+        // Try CFS first
+        if let Some(se) = self.cfs.pick_next_task() {
+            self.current = Some(se.tid);
+            return Some(se.tid);
+        }
+        
+        // Then try RT
+        if let Some(se) = self.rt.pick_next_task() {
+            self.current = Some(se.tid);
+            return Some(se.tid);
+        }
+        
+        None
     }
     
-    fn clear_need_resched(&mut self) {
-        self.need_resched = false;
+    /// Switch to a task
+    fn switch_to(&mut self, tid: Tid) {
+        // Save current task's context
+        if let Some(current_tid) = self.current {
+            if current_tid != tid {
+                // Look up current and next threads
+                let process_table = PROCESS_TABLE.lock();
+                if let (Some(current_thread), Some(next_thread)) = (
+                    process_table.find_thread(current_tid),
+                    process_table.find_thread(tid)
+                ) {
+                    // Update scheduler state
+                    self.current = Some(tid);
+                    self.nr_switches += 1;
+                    
+                    // Drop the lock before context switch to avoid deadlock
+                    drop(process_table);
+                    
+                    // TODO: Implement actual context switch
+                    // This would involve:
+                    // 1. Saving current thread's context
+                    // 2. Loading next thread's context
+                    // 3. Switching page tables if different processes
+                    // 4. Updating stack pointer and instruction pointer
+                    
+                    crate::info!("Context switch from TID {} to TID {}", current_tid.0, tid.0);
+                    return;
+                }
+            }
+        }
+        
+        // First task or same task
+        self.current = Some(tid);
+        self.nr_switches += 1;
+    }
+    
+    /// Set need resched flag
+    fn set_need_resched(&mut self) {
+        self.need_resched = true;
     }
 }
 
@@ -472,61 +499,122 @@ pub fn init() -> Result<()> {
 }
 
 /// Add a task to the scheduler
-pub fn add_task(tid: Tid, policy: SchedulerPolicy, nice: i32) {
+pub fn add_task(pid: crate::types::Pid) -> Result<()> {
     let mut scheduler = SCHEDULER.lock();
-    scheduler.add_task(tid, policy, nice);
+    
+    // Create a scheduler entity for the process
+    let tid = crate::types::Tid(pid.0); // Simple mapping for now
+    let se = SchedEntity::new(tid, SchedulerPolicy::Normal, DEFAULT_PRIO);
+    
+    // Add to CFS runqueue
+    scheduler.cfs.enqueue_task(se);
+    
+    Ok(())
 }
 
 /// Remove a task from the scheduler
-pub fn remove_task(tid: Tid) {
-    let mut scheduler = SCHEDULER.lock();
-    scheduler.remove_task(tid);
-}
-
-/// Schedule the next task
-pub fn schedule() -> Option<Tid> {
-    let mut scheduler = SCHEDULER.lock();
-    let result = scheduler.schedule();
-    scheduler.clear_need_resched();
-    result
-}
-
-/// Yield the current thread
-pub fn yield_now() {
-    let mut scheduler = SCHEDULER.lock();
-    scheduler.set_need_resched();
-    // In a real implementation, this would trigger a context switch
-}
-
-/// Sleep for a given number of milliseconds
-pub fn sleep_ms(ms: u64) {
-    // TODO: implement proper sleep mechanism with timer integration
-    // For now, just yield
-    yield_now();
-}
-
-/// Set scheduler policy for a task
-pub fn set_scheduler_policy(tid: Tid, policy: SchedulerPolicy, nice: i32) -> Result<()> {
+pub fn remove_task(pid: crate::types::Pid) -> Result<()> {
     let mut scheduler = SCHEDULER.lock();
     
-    if let Some(se) = scheduler.entities.get_mut(&tid) {
-        se.policy = policy;
-        se.nice = nice;
-        se.priority = nice_to_prio(nice);
-        se.load_weight = nice_to_weight(nice);
-        se.runnable_weight = nice_to_weight(nice);
-        Ok(())
-    } else {
-        Err(Error::NotFound)
+    // Remove from all runqueues
+    let tid = crate::types::Tid(pid.0);
+    
+    // Create a minimal SchedEntity for removal
+    let se = SchedEntity::new(tid, SchedulerPolicy::Normal, DEFAULT_PRIO);
+    scheduler.cfs.dequeue_task(&se);
+    scheduler.rt.dequeue_task(&se);
+    
+    Ok(())
+}
+
+/// Schedule next task (called from syscall exit or timer interrupt)
+pub fn schedule() {
+    let mut scheduler = SCHEDULER.lock();
+    
+    // Pick next task to run
+    if let Some(next) = scheduler.pick_next_task() {
+        // Switch to next task
+        scheduler.switch_to(next);
     }
 }
 
-/// Get scheduler statistics
-pub fn get_scheduler_stats() -> (u32, u32, bool) {
+/// Get current running task
+pub fn current_task() -> Option<crate::types::Pid> {
     let scheduler = SCHEDULER.lock();
-    let total_tasks = scheduler.entities.len() as u32;
-    let running_tasks = scheduler.run_queues.iter().map(|rq| rq.nr_running).sum();
-    (total_tasks, running_tasks, scheduler.need_resched)
+    scheduler.current.map(|tid| crate::types::Pid(tid.0))
+}
+
+/// Yield current task (alias for yield_task)
+pub fn yield_now() {
+    yield_task();
+}
+
+/// Yield current task
+pub fn yield_task() {
+    let mut scheduler = SCHEDULER.lock();
+    scheduler.set_need_resched();
+}
+
+/// Sleep current task for specified duration
+pub fn sleep_task(duration_ms: u64) {
+    // TODO: implement proper sleep mechanism with timer integration
+    // For now, just yield
+    yield_task();
+}
+
+/// Wake up a task
+pub fn wake_task(pid: crate::types::Pid) -> Result<()> {
+    let mut scheduler = SCHEDULER.lock();
+    let tid = crate::types::Tid(pid.0);
+    
+    // TODO: Move from wait queue to runqueue
+    // For now, just ensure it's in the runqueue
+    let se = SchedEntity::new(tid, SchedulerPolicy::Normal, DEFAULT_PRIO);
+    scheduler.cfs.enqueue_task(se);
+    
+    Ok(())
+}
+
+/// Set task priority
+pub fn set_task_priority(pid: crate::types::Pid, priority: i32) -> Result<()> {
+    let mut scheduler = SCHEDULER.lock();
+    let tid = crate::types::Tid(pid.0);
+    
+    // TODO: Update priority in runqueue
+    // This would require finding the task and updating its priority
+    
+    Ok(())
+}
+
+/// Get scheduler statistics
+pub fn get_scheduler_stats() -> SchedulerStats {
+    let scheduler = SCHEDULER.lock();
+    SchedulerStats {
+        total_tasks: (scheduler.cfs.nr_running + scheduler.rt.nr_running) as usize,
+        running_tasks: if scheduler.current.is_some() { 1 } else { 0 },
+        context_switches: scheduler.nr_switches,
+        load_average: scheduler.cfs.load_weight as f64 / 1024.0,
+    }
+}
+
+/// Scheduler statistics
+#[derive(Debug, Clone)]
+pub struct SchedulerStats {
+    pub total_tasks: usize,
+    pub running_tasks: usize,
+    pub context_switches: u64,
+    pub load_average: f64,
+}
+
+/// Calculate time slice for a task based on its weight
+fn calculate_time_slice(se: &SchedEntity) -> u64 {
+    // Linux-like time slice calculation
+    let sched_latency = 6_000_000; // 6ms in nanoseconds
+    let min_granularity = 750_000; // 0.75ms in nanoseconds
+    
+    // Time slice proportional to weight
+    let time_slice = sched_latency * se.load_weight as u64 / 1024;
+    core::cmp::max(time_slice, min_granularity)
 }
 
 /// Timer tick - called from timer interrupt
@@ -554,15 +642,4 @@ pub fn scheduler_tick() {
             }
         }
     }
-}
-
-/// Calculate time slice for a task based on its weight
-fn calculate_time_slice(se: &SchedEntity) -> u64 {
-    // Linux-like time slice calculation
-    let sched_latency = 6_000_000; // 6ms in nanoseconds
-    let min_granularity = 750_000; // 0.75ms in nanoseconds
-    
-    // Time slice proportional to weight
-    let time_slice = sched_latency * se.load_weight as u64 / 1024;
-    core::cmp::max(time_slice, min_granularity)
 }

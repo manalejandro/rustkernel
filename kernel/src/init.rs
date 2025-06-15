@@ -29,6 +29,20 @@ pub fn main_init() -> ! {
     }
     info!("Memory management initialized");
     
+    // Initialize kmalloc
+    if let Err(e) = crate::memory::kmalloc::init() {
+        error!("Failed to initialize kmalloc: {}", e);
+        panic!("Kmalloc initialization failed");
+    }
+    info!("Kmalloc initialized");
+    
+    // Initialize vmalloc
+    if let Err(e) = crate::memory::vmalloc::init() {
+        error!("Failed to initialize vmalloc: {}", e);
+        panic!("Vmalloc initialization failed");
+    }
+    info!("Vmalloc initialized");
+    
     // Initialize interrupt handling
     if let Err(e) = crate::interrupt::init() {
         error!("Failed to initialize interrupts: {}", e);

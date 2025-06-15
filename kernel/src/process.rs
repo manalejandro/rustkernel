@@ -6,6 +6,7 @@ use crate::types::{Pid, Tid, Uid, Gid};
 use crate::error::{Error, Result};
 use crate::sync::Spinlock;
 use crate::memory::VirtAddr;
+use crate::arch::x86_64::context::Context;
 use alloc::{string::{String, ToString}, vec::Vec, collections::BTreeMap};
 use core::sync::atomic::{AtomicU32, Ordering};
 
@@ -145,7 +146,7 @@ pub struct Thread {
     pub priority: i32,
     pub nice: i32, // Nice value (-20 to 19)
     pub cpu_time: u64, // Nanoseconds
-    pub context: ThreadContext,
+    pub context: Context,
 }
 
 impl Thread {
@@ -159,7 +160,7 @@ impl Thread {
             priority,
             nice: 0,
             cpu_time: 0,
-            context: ThreadContext::new(),
+            context: Context::new(),
         }
     }
     
@@ -174,50 +175,13 @@ impl Thread {
     }
 }
 
-/// Thread context for context switching
-#[derive(Debug, Clone, Default)]
-pub struct ThreadContext {
-    // x86_64 registers
-    pub rax: u64,
-    pub rbx: u64,
-    pub rcx: u64,
-    pub rdx: u64,
-    pub rsi: u64,
-    pub rdi: u64,
-    pub rbp: u64,
-    pub rsp: u64,
-    pub r8: u64,
-    pub r9: u64,
-    pub r10: u64,
-    pub r11: u64,
-    pub r12: u64,
-    pub r13: u64,
-    pub r14: u64,
-    pub r15: u64,
-    pub rip: u64,
-    pub rflags: u64,
-    // Segment registers
-    pub cs: u16,
-    pub ds: u16,
-    pub es: u16,
-    pub fs: u16,
-    pub gs: u16,
-    pub ss: u16,
-}
-
-impl ThreadContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
 /// Global process table
-static PROCESS_TABLE: Spinlock<ProcessTable> = Spinlock::new(ProcessTable::new());
+pub static PROCESS_TABLE: Spinlock<ProcessTable> = Spinlock::new(ProcessTable::new());
 static NEXT_PID: AtomicU32 = AtomicU32::new(1);
 static NEXT_TID: AtomicU32 = AtomicU32::new(1);
 
 /// Process table implementation
-struct ProcessTable {
+pub struct ProcessTable {
     processes: BTreeMap<Pid, Process>,
     current_process: Option<Pid>,
 }
@@ -230,7 +194,7 @@ impl ProcessTable {
         }
     }
     
-    fn add_process(&mut self, process: Process) {
+    pub fn add_process(&mut self, process: Process) {
         let pid = process.pid;
         self.processes.insert(pid, process);
         if self.current_process.is_none() {
@@ -257,6 +221,28 @@ impl ProcessTable {
     
     fn list_processes(&self) -> Vec<Pid> {
         self.processes.keys().copied().collect()
+    }
+    
+    pub fn find_thread(&self, tid: Tid) -> Option<&Thread> {
+        for process in self.processes.values() {
+            for thread in &process.threads {
+                if thread.tid == tid {
+                    return Some(thread);
+                }
+            }
+        }
+        None
+    }
+    
+    pub fn find_thread_mut(&mut self, tid: Tid) -> Option<&mut Thread> {
+        for process in self.processes.values_mut() {
+            for thread in &mut process.threads {
+                if thread.tid == tid {
+                    return Some(thread);
+                }
+            }
+        }
+        None
     }
 }
 
@@ -333,19 +319,13 @@ pub fn init_process_management() -> Result<()> {
 
 /// Initialize the process subsystem
 pub fn init() -> Result<()> {
-    // Create kernel process (PID 0)
-    let _kernel_pid = create_process(
-        String::from("kernel"),
-        Uid(0),
-        Gid(0)
+    // Initialize the process table and create kernel process (PID 0)
+    let kernel_pid = create_process(
+        "kernel".to_string(),
+        Uid(0),  // root
+        Gid(0),  // root
     )?;
     
-    // Create init process (PID 1) 
-    let _init_pid = create_process(
-        String::from("init"),
-        Uid(0), 
-        Gid(0)
-    )?;
-    
+    crate::info!("Process management initialized with kernel PID {}", kernel_pid.0);
     Ok(())
 }
