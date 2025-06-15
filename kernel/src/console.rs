@@ -69,6 +69,14 @@ pub fn _kprint(args: fmt::Arguments) {
     writer.write_fmt(args).unwrap();
 }
 
+/// Print informational message
+pub fn print_info(message: &str) {
+    let console = CONSOLE.lock();
+    let mut writer = ConsoleWriter(&*console);
+    writer.write_str("[INFO] ").unwrap();
+    writer.write_str(message).unwrap();
+}
+
 struct ConsoleWriter<'a>(&'a Console);
 
 impl Write for ConsoleWriter<'_> {

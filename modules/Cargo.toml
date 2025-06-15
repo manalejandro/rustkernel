@@ -6,6 +6,10 @@ authors = ["Rust Kernel Contributors"]
 description = "Kernel modules"
 license = "GPL-2.0"
 
+[lib]
+name = "modules"
+crate-type = ["rlib"]
+
 [dependencies]
 kernel = { path = "../kernel" }
 

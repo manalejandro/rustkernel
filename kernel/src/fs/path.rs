@@ -4,8 +4,7 @@
 
 use crate::error::{Error, Result};
 use crate::sync::Arc;
-use alloc::string::String;
-use alloc::vec::Vec;
+use alloc::{string::{String, ToString}, vec::Vec, format};  // Add format macro and ToString
 
 /// Path structure for path resolution
 #[derive(Debug, Clone)]

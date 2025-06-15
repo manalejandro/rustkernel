@@ -11,6 +11,7 @@ use kernel::device::{CharDevice, FileOperations, Inode, File, VMA};
 use kernel::driver::CharDriverOps;
 
 /// Null device driver (/dev/null)
+#[derive(Debug)]
 struct NullDevice;
 
 impl FileOperations for NullDevice {
@@ -42,6 +43,7 @@ impl FileOperations for NullDevice {
 }
 
 /// Zero device driver (/dev/zero)
+#[derive(Debug)]
 struct ZeroDevice;
 
 impl FileOperations for ZeroDevice {
@@ -78,6 +80,7 @@ impl FileOperations for ZeroDevice {
 }
 
 /// Full device driver (/dev/full) 
+#[derive(Debug)]
 struct FullDevice;
 
 impl FileOperations for FullDevice {

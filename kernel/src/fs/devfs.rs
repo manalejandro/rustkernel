@@ -9,9 +9,10 @@ use crate::error::{Error, Result};
 use crate::fs::*;
 use crate::memory::UserSlicePtr;
 use crate::sync::Arc;
-use alloc::string::String;
+use alloc::{string::String, vec, boxed::Box};  // Import vec macro and Box
 
 /// Character device file operations
+#[derive(Debug)]
 pub struct CharDevFileOps {
     /// Device operations
     dev_ops: Option<Arc<dyn CharDevOperations>>,
@@ -92,7 +93,7 @@ impl FileOperations for CharDevFileOps {
 }
 
 /// Character device operations trait
-pub trait CharDevOperations: Send + Sync {
+pub trait CharDevOperations: Send + Sync + core::fmt::Debug {
     fn read(&self, file: &File, buf: UserSlicePtr, count: usize) -> Result<isize>;
     fn write(&self, file: &File, buf: UserSlicePtr, count: usize) -> Result<isize>;
     fn ioctl(&self, file: &File, cmd: u32, arg: usize) -> Result<isize>;
@@ -103,6 +104,7 @@ pub trait CharDevOperations: Send + Sync {
 }
 
 /// /dev/null device operations
+#[derive(Debug)]
 pub struct NullDevOps;
 
 impl CharDevOperations for NullDevOps {
@@ -136,6 +138,7 @@ impl CharDevOperations for NullDevOps {
 }
 
 /// /dev/zero device operations
+#[derive(Debug)]
 pub struct ZeroDevOps;
 
 impl CharDevOperations for ZeroDevOps {
@@ -173,6 +176,7 @@ impl CharDevOperations for ZeroDevOps {
 }
 
 /// /dev/full device operations
+#[derive(Debug)]
 pub struct FullDevOps;
 
 impl CharDevOperations for FullDevOps {
@@ -209,6 +213,7 @@ impl CharDevOperations for FullDevOps {
 }
 
 /// /dev/random device operations (simplified)
+#[derive(Debug)]
 pub struct RandomDevOps;
 
 impl CharDevOperations for RandomDevOps {
@@ -319,6 +324,7 @@ impl DevFs {
 }
 
 /// DevFS inode operations
+#[derive(Debug)]
 pub struct DevFsInodeOps {
     devfs: *const DevFs,
 }

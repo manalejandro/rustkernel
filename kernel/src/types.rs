@@ -3,7 +3,7 @@
 //! Common kernel types
 
 use core::fmt;
-use core::ops::{Add, Sub};
+use core::ops::{Add, Sub, Mul};
 
 /// Process ID type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -109,6 +109,14 @@ impl Sub<usize> for VirtAddr {
     }
 }
 
+impl Sub<VirtAddr> for VirtAddr {
+    type Output = usize;
+    
+    fn sub(self, rhs: VirtAddr) -> Self::Output {
+        self.0 - rhs.0
+    }
+}
+
 impl fmt::Display for VirtAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "0x{:x}", self.0)
@@ -144,6 +152,14 @@ pub struct Irq(pub u32);
 /// Time types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Jiffies(pub u64);
+
+impl Mul<u64> for Jiffies {
+    type Output = u64;
+    
+    fn mul(self, rhs: u64) -> Self::Output {
+        self.0 * rhs
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Nanoseconds(pub u64);

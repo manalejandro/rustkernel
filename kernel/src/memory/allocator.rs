@@ -20,7 +20,7 @@ pub fn init() -> Result<()> {
     unsafe {
         HEAP_START = heap_start;
         HEAP_SIZE = heap_size;
-        ALLOCATOR.lock().init(heap_start, heap_size);
+        ALLOCATOR.lock().init(heap_start as *mut u8, heap_size);
     }
     
     Ok(())

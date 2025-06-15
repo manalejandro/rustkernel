@@ -8,8 +8,10 @@
 #![no_std]
 #![no_main]
 
+extern crate kernel;
+
 // Re-export the kernel crate
-pub use kernel;
+pub use kernel::*;
 
 /// Main kernel entry point
 #[no_mangle]

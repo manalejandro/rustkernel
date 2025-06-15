@@ -3,13 +3,14 @@
 //! File abstraction - Linux compatible
 
 use crate::error::{Error, Result};
-use crate::types::*;
-use crate::memory::{UserPtr, UserSlicePtr};
-use crate::sync::{Arc, Mutex, RwLock};
+// use crate::types::*;  // Commented out - unused for now
+use crate::memory::UserSlicePtr;  // Remove UserPtr since it's unused
+use crate::sync::Arc;  // Remove Mutex and RwLock since they're unused
 use alloc::string::String;
 use core::sync::atomic::{AtomicI64, AtomicU32, Ordering};
 
 /// File structure - similar to Linux struct file
+#[derive(Debug)]
 pub struct File {
     /// File operations
     pub f_op: Option<Arc<dyn FileOperations>>,
@@ -192,7 +193,7 @@ unsafe impl Send for File {}
 unsafe impl Sync for File {}
 
 /// File operations trait - similar to Linux file_operations
-pub trait FileOperations: Send + Sync {
+pub trait FileOperations: Send + Sync + core::fmt::Debug {
     /// Read from file
     fn read(&self, file: &File, buf: UserSlicePtr, count: usize) -> Result<isize>;
     

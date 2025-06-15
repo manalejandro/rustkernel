@@ -6,13 +6,11 @@ use crate::error::{Error, Result};
 use crate::fs::*;
 use crate::sync::{Arc, Mutex};
 use crate::memory::UserSlicePtr;
-use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::collections::BTreeMap;
-use alloc::format;
+use alloc::{string::String, vec::Vec, collections::BTreeMap, format, vec, boxed::Box};  // Add vec macro and Box
 use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Proc filesystem entry
+#[derive(Debug)]
 pub struct ProcEntry {
     /// Entry name
     pub name: String,
@@ -185,6 +183,7 @@ impl ProcFs {
 }
 
 /// Proc filesystem file operations
+#[derive(Debug)]
 pub struct ProcFileOps {
     entry: Arc<ProcEntry>,
 }
@@ -269,6 +268,7 @@ impl FileOperations for ProcFileOps {
 }
 
 /// Proc filesystem inode operations
+#[derive(Debug)]
 pub struct ProcInodeOps {
     fs: *const ProcFs,
 }

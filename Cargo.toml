@@ -10,15 +10,13 @@ license = "GPL-2.0"
 members = [
     "kernel",
     "drivers",
-    "modules",
-    "arch",
-    "mm",
-    "fs",
-    "net",
-    "security"
+    "modules"
 ]
 
 [workspace.dependencies]
+kernel = { path = "kernel" }
+
+[dependencies]
 kernel = { path = "kernel" }
 
 [lib]

@@ -4,11 +4,11 @@
 
 use crate::error::{Error, Result};
 use crate::sync::{Arc, Mutex, RwLock};
-use alloc::string::String;
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec, format};  // Add format macro
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// VFS mount structure - similar to Linux struct vfsmount
+#[derive(Debug)]
 pub struct VfsMount {
     /// Mounted superblock
     pub mnt_sb: Arc<super::SuperBlock>,

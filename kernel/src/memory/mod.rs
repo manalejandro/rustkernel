@@ -7,7 +7,10 @@ pub mod page;
 pub mod vmalloc;
 pub mod kmalloc;
 
-use crate::types::{PhysAddr, VirtAddr, Pfn};
+// Re-export important types
+pub use page::Page;
+pub use crate::types::{PhysAddr, VirtAddr, Pfn};  // Re-export from types
+
 use crate::error::{Error, Result};
 use core::alloc::{GlobalAlloc, Layout};
 use linked_list_allocator::LockedHeap;
@@ -227,4 +230,148 @@ bitflags::bitflags! {
         const CACHED = 1 << 5;
         const DEVICE = 1 << 6;
     }
+}
+
+/// User space pointer wrapper for safe kernel-user space data transfer
+#[derive(Debug, Clone, Copy)]
+pub struct UserPtr<T> {
+    ptr: *mut T,
+}
+
+impl<T> UserPtr<T> {
+    /// Create a new UserPtr (unsafe as it's not validated)
+    pub unsafe fn new(ptr: *mut T) -> Self {
+        Self { ptr }
+    }
+    
+    /// Get the raw pointer
+    pub fn as_ptr(&self) -> *mut T {
+        self.ptr
+    }
+    
+    /// Check if the pointer is null
+    pub fn is_null(&self) -> bool {
+        self.ptr.is_null()
+    }
+    
+    /// Write data to user space
+    pub fn write(&self, data: T) -> Result<()> {
+        // TODO: Implement proper user space access validation
+        // For now, this is a stub
+        if self.ptr.is_null() {
+            return Err(Error::InvalidArgument);
+        }
+        
+        // In a real kernel, this would use copy_to_user or similar
+        // For now, we'll use unsafe direct write (this is NOT safe for real use)
+        unsafe {
+            core::ptr::write(self.ptr, data);
+        }
+        Ok(())
+    }
+}
+
+/// User space slice pointer for array-like data
+#[derive(Debug, Clone, Copy)]
+pub struct UserSlicePtr {
+    ptr: *mut u8,
+    len: usize,
+}
+
+impl UserSlicePtr {
+    /// Create a new UserSlicePtr (unsafe as it's not validated)
+    pub unsafe fn new(ptr: *mut u8, len: usize) -> Self {
+        Self { ptr, len }
+    }
+    
+    /// Get the raw pointer
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.ptr
+    }
+    
+    /// Get the length
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    
+    /// Copy data from a slice to user space
+    pub fn copy_from_slice(&self, data: &[u8]) -> Result<()> {
+        // TODO: Implement proper user space access validation
+        // For now, this is a stub
+        if self.ptr.is_null() {
+            return Err(Error::InvalidArgument);
+        }
+        
+        let copy_len = core::cmp::min(self.len, data.len());
+        
+        // In a real kernel, this would use copy_to_user or similar
+        // For now, we'll use unsafe direct copy (this is NOT safe for real use)
+        unsafe {
+            core::ptr::copy_nonoverlapping(data.as_ptr(), self.ptr, copy_len);
+        }
+        Ok(())
+    }
+    
+    /// Copy data from user space to a slice
+    pub fn copy_to_slice(&self, data: &mut [u8]) -> Result<()> {
+        // TODO: Implement proper user space access validation
+        // For now, this is a stub
+        if self.ptr.is_null() {
+            return Err(Error::InvalidArgument);
+        }
+        
+        let copy_len = core::cmp::min(self.len, data.len());
+        
+        // In a real kernel, this would use copy_from_user or similar
+        // For now, we'll use unsafe direct copy (this is NOT safe for real use)
+        unsafe {
+            core::ptr::copy_nonoverlapping(self.ptr, data.as_mut_ptr(), copy_len);
+        }
+        Ok(())
+    }
+}
+
+/// Virtual memory area - similar to Linux vm_area_struct
+#[derive(Debug, Clone)]
+pub struct VmaArea {
+    pub vm_start: VirtAddr,
+    pub vm_end: VirtAddr,
+    pub vm_flags: u32,
+    pub vm_page_prot: u32,
+    pub vm_pgoff: u64,  // Offset in PAGE_SIZE units
+    pub vm_file: Option<alloc::sync::Arc<crate::fs::File>>,
+}
+
+impl VmaArea {
+    pub fn new(start: VirtAddr, end: VirtAddr, flags: u32) -> Self {
+        Self {
+            vm_start: start,
+            vm_end: end,
+            vm_flags: flags,
+            vm_page_prot: 0,
+            vm_pgoff: 0,
+            vm_file: None,
+        }
+    }
+    
+    pub fn size(&self) -> usize {
+        self.vm_end - self.vm_start
+    }
+}
+
+// VMA flags (similar to Linux)
+pub mod vma_flags {
+    pub const VM_READ: u32 = 0x00000001;
+    pub const VM_WRITE: u32 = 0x00000002;
+    pub const VM_EXEC: u32 = 0x00000004;
+    pub const VM_SHARED: u32 = 0x00000008;
+    pub const VM_MAYREAD: u32 = 0x00000010;
+    pub const VM_MAYWRITE: u32 = 0x00000020;
+    pub const VM_MAYEXEC: u32 = 0x00000040;
+    pub const VM_MAYSHARE: u32 = 0x00000080;
 }

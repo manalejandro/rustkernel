@@ -4,11 +4,11 @@
 
 use crate::error::{Error, Result};
 use crate::sync::{Arc, Mutex, RwLock};
-use alloc::string::String;
-use alloc::vec::Vec;
+use alloc::{string::String, vec::Vec, format};  // Add format macro
 use core::sync::atomic::{AtomicU32, Ordering};
 
 /// Dentry structure - similar to Linux struct dentry
+#[derive(Debug)]
 pub struct Dentry {
     /// Entry name
     pub d_name: String,
@@ -146,7 +146,7 @@ unsafe impl Send for Dentry {}
 unsafe impl Sync for Dentry {}
 
 /// Dentry operations trait - similar to Linux dentry_operations
-pub trait DentryOperations: Send + Sync {
+pub trait DentryOperations: Send + Sync + core::fmt::Debug {
     /// Revalidate dentry
     fn revalidate(&self, dentry: &Dentry) -> Result<bool>;
     
@@ -167,6 +167,7 @@ pub trait DentryOperations: Send + Sync {
 }
 
 /// Generic dentry operations
+#[derive(Debug)]
 pub struct GenericDentryOps;
 
 impl DentryOperations for GenericDentryOps {

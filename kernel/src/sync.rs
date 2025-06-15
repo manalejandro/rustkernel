@@ -6,6 +6,11 @@ use core::cell::UnsafeCell;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicBool, Ordering};
 
+// Re-export common synchronization types
+pub use alloc::sync::Arc;
+pub use spin::Mutex;
+pub use spin::RwLock;
+
 /// Spinlock implementation
 pub struct Spinlock<T> {
     locked: AtomicBool,
@@ -67,94 +72,5 @@ impl<T> Drop for SpinlockGuard<'_, T> {
     }
 }
 
-/// Mutex implementation (placeholder - would need proper scheduler integration)
-pub struct Mutex<T> {
-    inner: Spinlock<T>,
-}
-
-impl<T> Mutex<T> {
-    pub const fn new(data: T) -> Self {
-        Self {
-            inner: Spinlock::new(data),
-        }
-    }
-    
-    pub fn lock(&self) -> MutexGuard<T> {
-        MutexGuard {
-            guard: self.inner.lock(),
-        }
-    }
-}
-
-pub struct MutexGuard<'a, T> {
-    guard: SpinlockGuard<'a, T>,
-}
-
-impl<T> Deref for MutexGuard<'_, T> {
-    type Target = T;
-    
-    fn deref(&self) -> &Self::Target {
-        &*self.guard
-    }
-}
-
-impl<T> DerefMut for MutexGuard<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.guard
-    }
-}
-
-/// RwLock implementation (placeholder)
-pub struct RwLock<T> {
-    inner: Spinlock<T>,
-}
-
-impl<T> RwLock<T> {
-    pub const fn new(data: T) -> Self {
-        Self {
-            inner: Spinlock::new(data),
-        }
-    }
-    
-    pub fn read(&self) -> RwLockReadGuard<T> {
-        RwLockReadGuard {
-            guard: self.inner.lock(),
-        }
-    }
-    
-    pub fn write(&self) -> RwLockWriteGuard<T> {
-        RwLockWriteGuard {
-            guard: self.inner.lock(),
-        }
-    }
-}
-
-pub struct RwLockReadGuard<'a, T> {
-    guard: SpinlockGuard<'a, T>,
-}
-
-impl<T> Deref for RwLockReadGuard<'_, T> {
-    type Target = T;
-    
-    fn deref(&self) -> &Self::Target {
-        &*self.guard
-    }
-}
-
-pub struct RwLockWriteGuard<'a, T> {
-    guard: SpinlockGuard<'a, T>,
-}
-
-impl<T> Deref for RwLockWriteGuard<'_, T> {
-    type Target = T;
-    
-    fn deref(&self) -> &Self::Target {
-        &*self.guard
-    }
-}
-
-impl<T> DerefMut for RwLockWriteGuard<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.guard
-    }
-}
+// Note: We use spin::Mutex and spin::RwLock for actual implementations
+// The Spinlock above is for cases where we need a simple spinlock specifically

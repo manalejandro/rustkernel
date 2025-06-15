@@ -5,9 +5,9 @@
 pub use crate::error::{Error, Result};
 pub use crate::types::*;
 pub use crate::sync::{Mutex, RwLock, Spinlock};
-pub use crate::memory::{PhysAddr, VirtAddr, Page, PageTable};
+pub use crate::memory::{PhysAddr, VirtAddr, UserPtr, UserSlicePtr, PageTable};
 pub use crate::device::Device;
-pub use crate::driver::{Driver, DriverOps};
+pub use crate::driver::{Driver, CharDriverOps, BlockDriverOps};
 pub use crate::process::{Process, Thread};
 pub use crate::task::Task;
 
@@ -18,8 +18,10 @@ pub use alloc::{
     vec::Vec,
     collections::{BTreeMap, BTreeSet},
     format,
-    vec,
 };
+
+// Re-export macros
+pub use alloc::vec;
 
 // Re-export core types
 pub use core::{

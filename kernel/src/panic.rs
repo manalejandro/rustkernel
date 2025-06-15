@@ -6,6 +6,7 @@ use core::panic::PanicInfo;
 use core::fmt::Write;
 
 /// Panic handler
+#[panic_handler]
 pub fn panic_handler(info: &PanicInfo) -> ! {
     // Disable interrupts
     #[cfg(target_arch = "x86_64")]
@@ -27,9 +28,8 @@ pub fn panic_handler(info: &PanicInfo) -> ! {
         ).ok();
     }
     
-    if let Some(message) = info.message() {
-        writeln!(writer, "Message: {}", message).ok();
-    }
+    let message = info.message();
+    writeln!(writer, "Message: {}", message).ok();
     
     writeln!(writer, "===================\n").ok();
     

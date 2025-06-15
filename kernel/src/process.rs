@@ -20,7 +20,7 @@ pub enum ProcessState {
 }
 
 /// Process structure - similar to Linux task_struct
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Process {
     pub pid: Pid,
     pub parent: Option<Pid>,

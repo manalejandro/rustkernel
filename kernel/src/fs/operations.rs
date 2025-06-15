@@ -81,6 +81,7 @@ pub enum WritebackSyncMode {
 }
 
 /// Generic file operations implementation
+#[derive(Debug)]
 pub struct GenericFileOperations;
 
 impl super::FileOperations for GenericFileOperations {
@@ -150,6 +151,7 @@ impl super::FileOperations for GenericFileOperations {
 }
 
 /// Directory file operations
+#[derive(Debug)]
 pub struct DirectoryOperations;
 
 impl super::FileOperations for DirectoryOperations {
@@ -254,6 +256,7 @@ impl super::FileOperations for DirectoryOperations {
 }
 
 /// Special file operations (for device files)
+#[derive(Debug)]
 pub struct SpecialFileOperations;
 
 impl super::FileOperations for SpecialFileOperations {

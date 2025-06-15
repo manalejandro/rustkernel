@@ -5,6 +5,7 @@
 use crate::error::Result;
 use crate::types::{Nanoseconds, Microseconds, Milliseconds, Seconds, Jiffies};
 use core::sync::atomic::{AtomicU64, Ordering};
+use alloc::vec::Vec;  // Add Vec import
 
 /// System clock frequency (Hz) - typically 1000 for 1ms ticks
 pub const HZ: u64 = 1000;
@@ -50,16 +51,16 @@ impl TimeSpec {
         let nsec = (ns % NSEC_PER_SEC) as i64;
         Self::new(sec, nsec)
     }
-    
-    pub fn add_ns(&mut self, ns: u64) {
-        let total_ns = self.to_ns() + ns;
-        *self = Self::from_ns(total_ns);
-    }
-    
-    pub fn sub_ns(&mut self, ns: u64) {
-        let total_ns = self.to_ns().saturating_sub(ns);
-        *self = Self::from_ns(total_ns);
-    }
+}
+
+/// Get current system time
+pub fn get_current_time() -> TimeSpec {
+    // In a real implementation, this would read from a real-time clock
+    // For now, we'll use the boot time plus jiffies
+    let boot_ns = BOOTTIME_NS.load(Ordering::Relaxed);
+    let jiffies = get_jiffies();
+    let current_ns = boot_ns + (jiffies * NSEC_PER_JIFFY);
+    TimeSpec::from_ns(current_ns)
 }
 
 /// High resolution timer structure
@@ -266,17 +267,35 @@ impl TimerWheel {
 
 /// Global timer wheel
 use crate::sync::Spinlock;
-static TIMER_WHEEL: Spinlock<TimerWheel> = Spinlock::new(TimerWheel::new());
+use core::sync::atomic::AtomicBool;
+
+static TIMER_WHEEL_INIT: AtomicBool = AtomicBool::new(false);
+static mut TIMER_WHEEL_STORAGE: Option<Spinlock<TimerWheel>> = None;
+
+fn get_timer_wheel() -> &'static Spinlock<TimerWheel> {
+    if !TIMER_WHEEL_INIT.load(Ordering::Acquire) {
+        // Initialize timer wheel
+        let wheel = TimerWheel::new();
+        unsafe {
+            TIMER_WHEEL_STORAGE = Some(Spinlock::new(wheel));
+        }
+        TIMER_WHEEL_INIT.store(true, Ordering::Release);
+    }
+    
+    unsafe { TIMER_WHEEL_STORAGE.as_ref().unwrap() }
+}
 
 /// Add a timer to the system
 pub fn add_timer(timer: HrTimer) {
-    let mut wheel = TIMER_WHEEL.lock();
+    let timer_wheel = get_timer_wheel();
+    let mut wheel = timer_wheel.lock();
     wheel.add_timer(timer);
 }
 
 /// Run expired timers (called from timer interrupt)
 pub fn run_timers() {
-    let mut wheel = TIMER_WHEEL.lock();
+    let timer_wheel = get_timer_wheel();
+    let mut wheel = timer_wheel.lock();
     wheel.run_timers();
 }
 

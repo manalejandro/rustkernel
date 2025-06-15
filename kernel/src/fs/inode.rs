@@ -11,6 +11,7 @@ use alloc::string::String;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// Inode structure - similar to Linux struct inode
+#[derive(Debug)]
 pub struct Inode {
     /// Inode number
     pub i_ino: u64,
@@ -234,7 +235,7 @@ unsafe impl Send for Inode {}
 unsafe impl Sync for Inode {}
 
 /// Inode operations trait - similar to Linux inode_operations
-pub trait InodeOperations: Send + Sync {
+pub trait InodeOperations: Send + Sync + core::fmt::Debug {
     /// Look up a file in directory
     fn lookup(&self, dir: &Inode, name: &str) -> Result<Arc<Inode>>;
     
@@ -321,6 +322,7 @@ impl InodeAttr {
 }
 
 /// Generic inode operations for simple filesystems
+#[derive(Debug)]
 pub struct GenericInodeOps;
 
 impl InodeOperations for GenericInodeOps {

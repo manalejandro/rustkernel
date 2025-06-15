@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 /// Superblock structure - similar to Linux struct super_block
+#[derive(Debug)]
 pub struct SuperBlock {
     /// Device number
     pub s_dev: DeviceNumber,
@@ -182,7 +183,7 @@ unsafe impl Send for SuperBlock {}
 unsafe impl Sync for SuperBlock {}
 
 /// Superblock operations trait - similar to Linux super_operations
-pub trait SuperOperations: Send + Sync {
+pub trait SuperOperations: Send + Sync + core::fmt::Debug {
     /// Allocate inode
     fn alloc_inode(&self, sb: &SuperBlock) -> Result<Arc<super::Inode>>;
     
@@ -221,6 +222,7 @@ pub trait SuperOperations: Send + Sync {
 }
 
 /// File system type structure - similar to Linux file_system_type
+#[derive(Debug)]
 pub struct FileSystemType {
     /// File system name
     pub name: String,
@@ -262,6 +264,7 @@ impl FileSystemType {
 }
 
 /// Generic superblock operations
+#[derive(Debug)]
 pub struct GenericSuperOps;
 
 impl SuperOperations for GenericSuperOps {

@@ -29,6 +29,36 @@ pub enum Error {
     Device,
     /// Generic error
     Generic,
+    
+    // Linux-compatible errno values
+    /// Operation not permitted (EPERM)
+    EPERM,
+    /// No such file or directory (ENOENT)
+    ENOENT,
+    /// Bad file descriptor (EBADF)
+    EBADF,
+    /// No such device (ENODEV)
+    ENODEV,
+    /// Invalid argument (EINVAL)
+    EINVAL,
+    /// No space left on device (ENOSPC)
+    ENOSPC,
+    /// Inappropriate ioctl for device (ENOTTY)
+    ENOTTY,
+    /// Illegal seek (ESPIPE)
+    ESPIPE,
+    /// No data available (ENODATA)
+    ENODATA,
+    /// Function not implemented (ENOSYS)
+    ENOSYS,
+    /// Not a directory (ENOTDIR)
+    ENOTDIR,
+    /// Is a directory (EISDIR)
+    EISDIR,
+    /// File exists (EEXIST)
+    EEXIST,
+    /// Directory not empty (ENOTEMPTY)
+    ENOTEMPTY,
 }
 
 impl Error {
@@ -46,6 +76,22 @@ impl Error {
             Error::WouldBlock => -11,         // EAGAIN
             Error::Device => -19,             // ENODEV
             Error::Generic => -1,             // EPERM
+            
+            // Linux errno mappings
+            Error::EPERM => -1,               // EPERM
+            Error::ENOENT => -2,              // ENOENT
+            Error::EBADF => -9,               // EBADF
+            Error::ENODEV => -19,             // ENODEV
+            Error::EINVAL => -22,             // EINVAL
+            Error::ENOSPC => -28,             // ENOSPC
+            Error::ENOTTY => -25,             // ENOTTY
+            Error::ESPIPE => -29,             // ESPIPE
+            Error::ENODATA => -61,            // ENODATA
+            Error::ENOSYS => -38,             // ENOSYS
+            Error::ENOTDIR => -20,            // ENOTDIR
+            Error::EISDIR => -21,             // EISDIR
+            Error::EEXIST => -17,             // EEXIST
+            Error::ENOTEMPTY => -39,          // ENOTEMPTY
         }
     }
 }
@@ -64,6 +110,22 @@ impl fmt::Display for Error {
             Error::WouldBlock => write!(f, "Resource temporarily unavailable"),
             Error::Device => write!(f, "Device error"),
             Error::Generic => write!(f, "Generic error"),
+            
+            // Linux errno variants
+            Error::EPERM => write!(f, "Operation not permitted"),
+            Error::ENOENT => write!(f, "No such file or directory"),
+            Error::EBADF => write!(f, "Bad file descriptor"),
+            Error::ENODEV => write!(f, "No such device"),
+            Error::EINVAL => write!(f, "Invalid argument"),
+            Error::ENOSPC => write!(f, "No space left on device"),
+            Error::ENOTTY => write!(f, "Inappropriate ioctl for device"),
+            Error::ESPIPE => write!(f, "Illegal seek"),
+            Error::ENODATA => write!(f, "No data available"),
+            Error::ENOSYS => write!(f, "Function not implemented"),
+            Error::ENOTDIR => write!(f, "Not a directory"),
+            Error::EISDIR => write!(f, "Is a directory"),
+            Error::EEXIST => write!(f, "File exists"),
+            Error::ENOTEMPTY => write!(f, "Directory not empty"),
         }
     }
 }

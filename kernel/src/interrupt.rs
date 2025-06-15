@@ -5,7 +5,7 @@
 use crate::error::{Error, Result};
 use crate::sync::Spinlock;
 use crate::types::Irq;
-use alloc::{vec::Vec, collections::BTreeMap};
+use alloc::{vec::Vec, collections::BTreeMap, boxed::Box};  // Add Box import
 use core::fmt;
 
 /// IRQ flags - compatible with Linux kernel
@@ -45,13 +45,33 @@ impl fmt::Display for IrqReturn {
 /// Interrupt handler function type - Linux compatible
 pub type IrqHandler = fn(irq: u32, dev_id: *mut u8) -> IrqReturn;
 
+/// A wrapper for device pointer that can be safely shared between threads
+/// In kernel code, we know the device pointer is valid for the lifetime of the driver
+#[derive(Debug)]
+pub struct DevicePointer(*mut u8);
+
+impl DevicePointer {
+    pub fn new(ptr: *mut u8) -> Self {
+        Self(ptr)
+    }
+    
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.0
+    }
+}
+
+// SAFETY: In kernel code, device pointers are managed by the kernel
+// and are valid for the lifetime of the driver registration
+unsafe impl Send for DevicePointer {}
+unsafe impl Sync for DevicePointer {}
+
 /// Interrupt action structure - similar to Linux irqaction
 #[derive(Debug)]
 pub struct IrqAction {
     pub handler: IrqHandler,
     pub flags: u32,
     pub name: &'static str,
-    pub dev_id: *mut u8,
+    pub dev_id: DevicePointer,
     pub next: Option<Box<IrqAction>>,
 }
 
@@ -61,7 +81,7 @@ impl IrqAction {
             handler,
             flags,
             name,
-            dev_id,
+            dev_id: DevicePointer::new(dev_id),
             next: None,
         }
     }
@@ -131,8 +151,12 @@ impl InterruptSubsystem {
         self.descriptors.insert(irq, desc);
     }
     
-    fn get_descriptor(&mut self, irq: u32) -> Option<&mut IrqDescriptor> {
+    fn get_descriptor_mut(&mut self, irq: u32) -> Option<&mut IrqDescriptor> {
         self.descriptors.get_mut(&irq)
+    }
+    
+    fn get_descriptor(&self, irq: u32) -> Option<&IrqDescriptor> {
+        self.descriptors.get(&irq)
     }
 }
 
@@ -228,7 +252,7 @@ pub fn request_irq(
 ) -> Result<()> {
     let mut subsystem = INTERRUPT_SUBSYSTEM.lock();
     
-    if let Some(desc) = subsystem.get_descriptor(irq) {
+    if let Some(desc) = subsystem.get_descriptor_mut(irq) {
         let action = IrqAction::new(handler, flags, name, dev_id);
         
         // Check if IRQ is shared
@@ -258,18 +282,29 @@ pub fn request_irq(
 pub fn free_irq(irq: u32, dev_id: *mut u8) -> Result<()> {
     let mut subsystem = INTERRUPT_SUBSYSTEM.lock();
     
-    if let Some(desc) = subsystem.get_descriptor(irq) {
+    if let Some(desc) = subsystem.get_descriptor_mut(irq) {
         // Remove action with matching dev_id
+        let mut prev: Option<&mut Box<IrqAction>> = None;
         let mut current = &mut desc.action;
         let mut found = false;
         
-        while let Some(ref mut action) = current {
-            if action.dev_id == dev_id {
+        // Handle first element specially
+        if let Some(ref mut action) = current {
+            if action.dev_id.as_ptr() == dev_id {
                 *current = action.next.take();
                 found = true;
-                break;
+            } else {
+                // Search in the chain
+                let mut node = current.as_mut().unwrap();
+                while let Some(ref mut next_action) = node.next {
+                    if next_action.dev_id.as_ptr() == dev_id {
+                        node.next = next_action.next.take();
+                        found = true;
+                        break;
+                    }
+                    node = node.next.as_mut().unwrap();
+                }
             }
-            current = &mut action.next;
         }
         
         if found {
@@ -308,7 +343,7 @@ pub fn disable() {
 pub fn enable_irq(irq: u32) -> Result<()> {
     let mut subsystem = INTERRUPT_SUBSYSTEM.lock();
     
-    if let Some(desc) = subsystem.get_descriptor(irq) {
+    if let Some(desc) = subsystem.get_descriptor_mut(irq) {
         desc.enable();
         crate::debug!("Enabled IRQ {}", irq);
         Ok(())
@@ -321,7 +356,7 @@ pub fn enable_irq(irq: u32) -> Result<()> {
 pub fn disable_irq(irq: u32) -> Result<()> {
     let mut subsystem = INTERRUPT_SUBSYSTEM.lock();
     
-    if let Some(desc) = subsystem.get_descriptor(irq) {
+    if let Some(desc) = subsystem.get_descriptor_mut(irq) {
         desc.disable();
         crate::debug!("Disabled IRQ {}", irq);
         Ok(())
@@ -334,7 +369,7 @@ pub fn disable_irq(irq: u32) -> Result<()> {
 pub fn handle_interrupt(irq: u32) {
     let mut subsystem = INTERRUPT_SUBSYSTEM.lock();
     
-    if let Some(desc) = subsystem.get_descriptor(irq) {
+    if let Some(desc) = subsystem.get_descriptor_mut(irq) {
         desc.irq_count += 1;
         
         if !desc.is_enabled() {
@@ -348,7 +383,7 @@ pub fn handle_interrupt(irq: u32) {
         let mut handled = false;
         
         while let Some(action) = current {
-            let result = (action.handler)(irq, action.dev_id);
+            let result = (action.handler)(irq, action.dev_id.as_ptr());
             match result {
                 IrqReturn::Handled => {
                     handled = true;

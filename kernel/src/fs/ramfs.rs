@@ -5,9 +5,7 @@
 use crate::error::{Error, Result};
 use crate::fs::*;
 use crate::sync::{Arc, Mutex};
-use alloc::string::String;
-use alloc::vec::Vec;
-use alloc::collections::BTreeMap;
+use alloc::{string::String, vec::Vec, collections::BTreeMap, boxed::Box};  // Add Box import
 use core::sync::atomic::{AtomicU64, Ordering};
 
 /// RAM filesystem superblock
@@ -97,6 +95,7 @@ impl RamFs {
 }
 
 /// RAM filesystem inode operations
+#[derive(Debug)]
 pub struct RamFsInodeOps {
     fs: *const RamFs,
 }
@@ -120,8 +119,8 @@ impl InodeOperations for RamFsInodeOps {
     fn lookup(&self, dir: &Inode, name: &str) -> Result<Arc<Inode>> {
         let fs = self.get_fs();
         if let Some(entry) = fs.find_entry(dir.i_ino, name) {
-            if let Some(inode) = entry.d_inode {
-                Ok(inode)
+            if let Some(inode) = &entry.d_inode {
+                Ok(Arc::clone(inode))
             } else {
                 Err(Error::ENOENT)
             }
@@ -209,7 +208,7 @@ impl InodeOperations for RamFsInodeOps {
             fs.remove_entry(old_dir.i_ino, old_name)?;
             
             // Add to new location
-            if let Some(inode) = entry.d_inode {
+            if let Some(inode) = &entry.d_inode {
                 fs.add_entry(new_dir.i_ino, String::from(new_name), inode.i_ino)?;
             }
             
@@ -280,6 +279,7 @@ pub fn mount_ramfs(_dev_name: &str, _flags: u32, _data: Option<&str>) -> Result<
 }
 
 /// RAM filesystem superblock operations
+#[derive(Debug)]
 pub struct RamFsSuperOps;
 
 impl SuperOperations for RamFsSuperOps {

@@ -12,12 +12,12 @@
 #![feature(asm_const)]
 #![feature(const_mut_refs)]
 #![feature(custom_test_frameworks)]
+#![feature(allocator_api)]
 #![test_runner(crate::test_runner)]
 #![reexport_test_harness_main = "test_main"]
 
 extern crate alloc;
 
-pub mod allocator;
 pub mod arch;
 pub mod boot;
 pub mod console;
@@ -84,11 +84,7 @@ pub fn exit_qemu(exit_code: QemuExitCode) {
     }
 }
 
-/// Kernel panic handler
-#[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
-    panic::panic_handler(info)
-}
+
 
 /// Global allocator error handler
 #[alloc_error_handler]

@@ -5,10 +5,10 @@
 use crate::error::{Error, Result};
 use crate::device::Device;
 use crate::sync::Spinlock;
-use alloc::{vec::Vec, string::String, collections::BTreeMap, boxed::Box};
+use alloc::{vec::Vec, string::{String, ToString}, collections::BTreeMap, boxed::Box};  // Add ToString
 
 /// Driver trait - Linux compatible
-pub trait Driver: Send + Sync {
+pub trait Driver: Send + Sync + core::fmt::Debug {
     /// Driver name
     fn name(&self) -> &str;
     
