@@ -14,16 +14,8 @@ crate-type = ["rlib"]
 kernel = { path = "../kernel" }
 
 [[bin]]
-name = "dummy_driver"
-path = "src/dummy.rs"
-
-[[bin]]
 name = "mem_devices"
 path = "src/mem.rs"
-
-[[bin]]
-name = "platform_example"
-path = "src/platform_example.rs"
 
 [[bin]]
 name = "ramdisk"

@@ -12,11 +12,3 @@ crate-type = ["rlib"]
 
 [dependencies]
 kernel = { path = "../kernel" }
-
-[[bin]]
-name = "hello_module"
-path = "src/hello.rs"
-
-[[bin]]
-name = "test_module"
-path = "src/test.rs"

@@ -2,9 +2,9 @@
 
 //! x86_64 architecture support
 
-pub mod port;
+pub mod context;
 pub mod gdt;
 pub mod idt;
 pub mod paging;
 pub mod pic;
-pub mod context;
+pub mod port;

@@ -1,10 +1,4 @@
 # Clippy configuration for kernel development
-warn = [
-    "clippy::all",
-    "clippy::pedantic",
-    "clippy::nursery",
-    "clippy::cargo"
-]
 
 allow = [
     "clippy::missing_errors_doc",
@@ -19,3 +13,9 @@ allow = [
     "clippy::too_many_lines",
     "clippy::unused_self"
 ]
+
+# Kernel-specific thresholds
+cognitive-complexity-threshold = 30
+too-many-arguments-threshold = 8
+type-complexity-threshold = 250
+single-char-lifetime-names-threshold = 4

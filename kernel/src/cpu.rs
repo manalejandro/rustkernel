@@ -4,5 +4,5 @@
 use crate::error::Result;
 
 pub fn init() -> Result<()> {
-    Ok(())
+	Ok(())
 }

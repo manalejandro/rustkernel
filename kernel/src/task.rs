@@ -6,5 +6,5 @@ use crate::error::Result;
 pub struct Task;
 
 pub fn init() -> Result<()> {
-    Ok(())
+	Ok(())
 }
