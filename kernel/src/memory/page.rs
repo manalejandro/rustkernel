@@ -93,17 +93,17 @@ pub mod page_flags {
 }
 
 /// Page frame allocator
-static PAGE_ALLOCATOR: Spinlock<PageAllocator> = Spinlock::new(PageAllocator::new());
+pub static PAGE_ALLOCATOR: Spinlock<PageAllocator> = Spinlock::new(PageAllocator::new());
 
 /// Page allocator implementation
-struct PageAllocator {
+pub struct PageAllocator {
     free_pages: BTreeSet<Pfn>,
     total_pages: usize,
     allocated_pages: usize,
 }
 
 impl PageAllocator {
-    const fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             free_pages: BTreeSet::new(),
             total_pages: 0,
@@ -112,7 +112,7 @@ impl PageAllocator {
     }
     
     /// Add a range of pages to the free list
-    fn add_free_range(&mut self, start: Pfn, count: usize) {
+    pub fn add_free_range(&mut self, start: Pfn, count: usize) {
         for i in 0..count {
             self.free_pages.insert(Pfn(start.0 + i));
         }
@@ -157,11 +157,32 @@ pub fn init() -> Result<()> {
     Ok(())
 }
 
+/// Add a range of free pages by physical address
+pub fn add_free_range(start_addr: PhysAddr, end_addr: PhysAddr) -> Result<()> {
+    let start_pfn = Pfn::from_phys_addr(start_addr);
+    let end_pfn = Pfn::from_phys_addr(end_addr);
+    
+    if end_pfn.0 <= start_pfn.0 {
+        return Err(crate::error::Error::InvalidArgument);
+    }
+    
+    let count = end_pfn.0 - start_pfn.0;
+    let mut allocator = PAGE_ALLOCATOR.lock();
+    allocator.add_free_range(start_pfn, count);
+    
+    Ok(())
+}
+
 /// Allocate a page of physical memory
 pub fn alloc_page() -> Result<PhysAddr> {
     let mut allocator = PAGE_ALLOCATOR.lock();
     let pfn = allocator.alloc_page()?;
     Ok(pfn.to_phys_addr())
+}
+
+/// Allocate a page of physical memory (alias for alloc_page)
+pub fn allocate_page() -> Result<PhysAddr> {
+    alloc_page()
 }
 
 /// Free a page of physical memory

@@ -66,8 +66,13 @@ clippy:
 doc:
 	$(CARGO) doc $(CARGO_FLAGS) --no-deps
 
+# Test the kernel
+test-kernel: kernel
+	@echo "Testing kernel functionality"
+	cd kernel && $(CARGO) test $(CARGO_FLAGS)
+
 # Install (placeholder)
 install:
 	@echo "Install target not implemented yet"
 
-.PHONY: all kernel modules drivers clean test fmt-check fmt clippy doc install
+.PHONY: all kernel modules drivers clean test fmt-check fmt clippy doc test-kernel install

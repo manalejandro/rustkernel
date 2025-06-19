@@ -57,6 +57,37 @@ pub const GFP_KERNEL: AllocFlags = AllocFlags::new(gfp::GFP_KERNEL);
 pub const GFP_ATOMIC: AllocFlags = AllocFlags::new(gfp::GFP_ATOMIC);
 pub const GFP_USER: AllocFlags = AllocFlags::new(gfp::GFP_USER);
 
+/// Page mapping flags
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct PageFlags(u64);
+
+impl PageFlags {
+    pub const PRESENT: PageFlags = PageFlags(1 << 0);
+    pub const WRITABLE: PageFlags = PageFlags(1 << 1);
+    pub const USER: PageFlags = PageFlags(1 << 2);
+    pub const EXECUTABLE: PageFlags = PageFlags(1 << 63); // NX bit inverted
+    
+    pub const fn new(flags: u64) -> Self {
+        Self(flags)
+    }
+    
+    pub fn as_raw(self) -> u64 {
+        self.0
+    }
+    
+    pub fn contains(self, flags: PageFlags) -> bool {
+        (self.0 & flags.0) == flags.0
+    }
+}
+
+impl core::ops::BitOr for PageFlags {
+    type Output = Self;
+    
+    fn bitor(self, rhs: Self) -> Self::Output {
+        PageFlags(self.0 | rhs.0)
+    }
+}
+
 /// Initialize the memory management subsystem with proper Linux-style initialization
 pub fn init() -> Result<()> {
     allocator::init()?;
@@ -112,6 +143,31 @@ pub fn memory_info() -> MemoryInfo {
     }
 }
 
+/// Memory statistics for diagnostics
+#[derive(Debug, Clone)]
+pub struct MemoryStats {
+    pub total: usize,
+    pub used: usize,
+    pub free: usize,
+    pub usage_percent: usize,
+}
+
+/// Get memory statistics for diagnostics
+pub fn get_memory_stats() -> Result<MemoryStats> {
+    let info = memory_info();
+    let total = if info.total_pages > 0 { info.total_pages * 4096 } else { 64 * 1024 * 1024 }; // Default 64MB
+    let used = info.used_pages * 4096;
+    let free = total - used;
+    let usage_percent = if total > 0 { (used * 100) / total } else { 0 };
+    
+    Ok(MemoryStats {
+        total,
+        used,
+        free,
+        usage_percent,
+    })
+}
+
 /// Allocate a page of physical memory
 pub fn alloc_page() -> Result<PhysAddr> {
     page::alloc_page()
@@ -122,10 +178,21 @@ pub fn free_page(addr: PhysAddr) {
     page::free_page(addr)
 }
 
+/// Allocate a page of physical memory
+pub fn allocate_page() -> Result<PhysAddr> {
+    page::allocate_page()
+}
+
 /// Map a virtual address to a physical address
-pub fn map_page(virt: VirtAddr, phys: PhysAddr) -> Result<()> {
-    // TODO: implement page table mapping
+pub fn map_page(virt: VirtAddr, phys: PhysAddr, flags: PageFlags) -> Result<()> {
+    // TODO: implement page table mapping with flags
     Ok(())
+}
+
+/// Map a virtual address to a physical address (simple version)
+pub fn map_page_simple(virt: VirtAddr, phys: PhysAddr) -> Result<()> {
+    // TODO: implement page table mapping  
+    map_page(virt, phys, PageFlags::PRESENT | PageFlags::WRITABLE)
 }
 
 /// Unmap a virtual address

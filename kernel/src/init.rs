@@ -92,8 +92,97 @@ pub fn main_init() -> ! {
     }
     info!("Time management initialized");
     
-    // TODO: Initialize drivers
-    // init_drivers();
+    // Display system information
+    crate::test_init::display_system_info();
+    
+    // Run basic functionality tests
+    if let Err(e) = crate::test_init::run_basic_tests() {
+        error!("Basic functionality tests failed: {}", e);
+        panic!("Basic tests failed");
+    }
+    
+    // Run initialization tests
+    if let Err(e) = crate::test_init::run_init_tests() {
+        error!("Initialization tests failed: {}", e);
+        panic!("Initialization tests failed");
+    }
+    
+    // Initialize drivers
+    if let Err(e) = crate::drivers_init::init_drivers() {
+        error!("Failed to initialize drivers: {}", e);
+        panic!("Driver initialization failed");
+    }
+    info!("Drivers initialized");
+    
+    // Initialize kernel threads
+    if let Err(e) = crate::kthread::init_kthreads() {
+        error!("Failed to initialize kernel threads: {}", e);
+        panic!("Kernel thread initialization failed");
+    }
+    info!("Kernel threads initialized");
+    
+    // Initialize kernel shell
+    if let Err(e) = crate::shell::init_shell() {
+        error!("Failed to initialize kernel shell: {}", e);
+        panic!("Shell initialization failed");
+    }
+    info!("Kernel shell initialized");
+    
+    // Initialize basic networking
+    if let Err(e) = crate::net_basic::init_networking() {
+        error!("Failed to initialize networking: {}", e);
+        panic!("Networking initialization failed");  
+    }
+    info!("Basic networking initialized");
+    
+    // Initialize module loading system
+    if let Err(e) = crate::module_loader::init_modules() {
+        error!("Failed to initialize module system: {}", e);
+        panic!("Module system initialization failed");
+    }
+    info!("Module system initialized");
+    
+    // Initialize in-memory file system
+    if let Err(e) = crate::memfs::init_memfs() {
+        error!("Failed to initialize file system: {}", e);
+        panic!("File system initialization failed");
+    }
+    info!("In-memory file system initialized");
+    
+    // Initialize user mode support
+    if let Err(e) = crate::usermode::init_usermode() {
+        error!("Failed to initialize user mode: {}", e);
+        panic!("User mode initialization failed");
+    }
+    info!("User mode support initialized");
+    
+    // Initialize performance monitoring
+    if let Err(e) = crate::perf::init_perf_monitor() {
+        error!("Failed to initialize performance monitoring: {}", e);
+        panic!("Performance monitoring initialization failed");
+    }
+    info!("Performance monitoring initialized");
+    
+    // Initialize advanced logging system
+    if let Err(e) = crate::logging::init_logging() {
+        error!("Failed to initialize logging system: {}", e);
+        panic!("Logging system initialization failed");
+    }
+    info!("Advanced logging system initialized");
+    
+    // Initialize system information collection
+    if let Err(e) = crate::sysinfo::init_sysinfo() {
+        error!("Failed to initialize system information: {}", e);
+        panic!("System information initialization failed");
+    }
+    info!("System information collection initialized");
+    
+    // Initialize system diagnostics
+    if let Err(e) = crate::diagnostics::init_diagnostics() {
+        error!("Failed to initialize system diagnostics: {}", e);
+        panic!("System diagnostics initialization failed");
+    }
+    info!("System diagnostics initialized");
     
     // TODO: Start kernel threads
     // start_kernel_threads();

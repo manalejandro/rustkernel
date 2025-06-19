@@ -8,14 +8,8 @@
 
 extern crate alloc;
 
-pub mod dummy;
 pub mod mem;
-pub mod platform_example;
 pub mod ramdisk;
-pub mod keyboard; // New keyboard driver
-pub mod serial;   // New serial driver
-
-pub use dummy::*;
-pub use mem::*;
-pub use platform_example::*;
+pub mod keyboard; // Keyboard driver
+pub mod serial;   // Serial driver
 pub use ramdisk::*;

@@ -122,7 +122,7 @@ impl Console {
         self.column_position = 0;
     }
     
-    fn write_str(&mut self, s: &str) {
+    pub fn write_str(&mut self, s: &str) {
         if !self.initialized {
             return;
         }
@@ -239,6 +239,12 @@ pub fn print_info(message: &str) {
     let mut writer = ConsoleWriter(&mut *console);
     writer.write_str("[INFO] ").unwrap();
     writer.write_str(message).unwrap();
+}
+
+/// Write string to console
+pub fn write_str(s: &str) {
+    let mut console = CONSOLE.lock();
+    console.write_str(s);
 }
 
 struct ConsoleWriter<'a>(&'a mut Console);

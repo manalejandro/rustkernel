@@ -8,8 +8,5 @@
 
 extern crate alloc;
 
-pub mod hello;
-pub mod test;
-
-pub use hello::*;
-pub use test::*;
+// Module infrastructure is ready for dynamic modules
+// Modules can be loaded at runtime through the module_loader system

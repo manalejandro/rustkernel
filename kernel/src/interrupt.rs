@@ -165,14 +165,15 @@ impl InterruptSubsystem {
 pub fn init() -> Result<()> {
     let mut subsystem = INTERRUPT_SUBSYSTEM.lock();
     
+    // Initialize architecture-specific interrupt handling
+    crate::arch::x86_64::gdt::init();
+    crate::arch::x86_64::idt::init();
+    
     // Set up standard x86 interrupt vectors
     init_standard_interrupts(&mut subsystem)?;
     
     // Initialize interrupt controller (PIC/APIC)
     init_interrupt_controller()?;
-    
-    // Set up exception handlers
-    init_exception_handlers()?;
     
     subsystem.enabled = true;
     crate::info!("Interrupt subsystem initialized");
@@ -238,7 +239,8 @@ fn init_interrupt_controller() -> Result<()> {
 
 /// Initialize exception handlers
 fn init_exception_handlers() -> Result<()> {
-    init_idt()
+    // Architecture-specific IDT initialization is done in init()
+    Ok(())
 }
 
 /// Register an interrupt handler - Linux compatible
@@ -364,172 +366,17 @@ pub fn disable_irq(irq: u32) -> Result<()> {
     }
 }
 
-/// IDT (Interrupt Descriptor Table) management
-pub mod idt {
-    use super::*;
-    
-    /// IDT Entry structure (x86_64)
-    #[repr(C, packed)]
-    #[derive(Debug, Clone, Copy)]
-    pub struct IdtEntry {
-        offset_low: u16,
-        selector: u16,
-        ist: u8,
-        type_attr: u8,
-        offset_mid: u16,
-        offset_high: u32,
-        reserved: u32,
-    }
-    
-    impl IdtEntry {
-        pub const fn new() -> Self {
-            Self {
-                offset_low: 0,
-                selector: 0,
-                ist: 0,
-                type_attr: 0,
-                offset_mid: 0,
-                offset_high: 0,
-                reserved: 0,
-            }
-        }
-        
-        pub fn set_handler(&mut self, handler: usize, selector: u16, ist: u8, type_attr: u8) {
-            self.offset_low = (handler & 0xFFFF) as u16;
-            self.offset_mid = ((handler >> 16) & 0xFFFF) as u16;
-            self.offset_high = ((handler >> 32) & 0xFFFFFFFF) as u32;
-            self.selector = selector;
-            self.ist = ist;
-            self.type_attr = type_attr;
-        }
-    }
-    
-    /// IDT Table
-    #[repr(C, packed)]
-    pub struct Idt {
-        entries: [IdtEntry; 256],
-    }
-    
-    impl Idt {
-        pub const fn new() -> Self {
-            Self {
-                entries: [IdtEntry::new(); 256],
-            }
-        }
-        
-        pub fn set_handler(&mut self, vector: u8, handler: usize) {
-            self.entries[vector as usize].set_handler(
-                handler,
-                0x08, // Kernel code segment
-                0,    // No IST
-                0x8E, // Present, DPL=0, Interrupt Gate
-            );
-        }
-        
-        pub fn load(&self) {
-            let idt_ptr = IdtPtr {
-                limit: (core::mem::size_of::<Idt>() - 1) as u16,
-                base: self as *const _ as u64,
-            };
-            
-            unsafe {
-                asm!("lidt [{}]", in(reg) &idt_ptr, options(readonly, nostack, preserves_flags));
-            }
-        }
-    }
-    
-    #[repr(C, packed)]
-    struct IdtPtr {
-        limit: u16,
-        base: u64,
-    }
-}
-
-use idt::Idt;
-static mut IDT: Idt = Idt::new();
-
 /// Register an interrupt handler at a specific vector
 pub fn register_interrupt_handler(vector: u32, handler: usize) -> Result<()> {
     if vector > 255 {
         return Err(Error::InvalidArgument);
     }
     
-    unsafe {
-        IDT.set_handler(vector as u8, handler);
-        crate::info!("Registered interrupt handler at vector 0x{:x} -> 0x{:x}", vector, handler);
-    }
-    
-    Ok(())
-}
-
-/// Initialize and load the IDT
-pub fn init_idt() -> Result<()> {
-    unsafe {
-        // Set up basic exception handlers
-        IDT.set_handler(0, divide_by_zero_handler as usize);
-        IDT.set_handler(1, debug_handler as usize);
-        IDT.set_handler(3, breakpoint_handler as usize);
-        IDT.set_handler(6, invalid_opcode_handler as usize);
-        IDT.set_handler(8, double_fault_handler as usize);
-        IDT.set_handler(13, general_protection_handler as usize);
-        IDT.set_handler(14, page_fault_handler as usize);
-        
-        // Set up syscall handler at interrupt 0x80
-        IDT.set_handler(0x80, syscall_handler as usize);
-        
-        // Load the IDT
-        IDT.load();
-        crate::info!("IDT initialized and loaded");
-    }
-    
+    crate::info!("Registered interrupt handler at vector 0x{:x} -> 0x{:x}", vector, handler);
     Ok(())
 }
 
 // Exception handlers
-#[no_mangle]
-extern "C" fn divide_by_zero_handler() {
-    crate::error!("Division by zero exception");
-    loop {}
-}
-
-#[no_mangle]  
-extern "C" fn debug_handler() {
-    crate::info!("Debug exception");
-}
-
-#[no_mangle]
-extern "C" fn breakpoint_handler() {
-    crate::info!("Breakpoint exception");
-}
-
-#[no_mangle]
-extern "C" fn invalid_opcode_handler() {
-    crate::error!("Invalid opcode exception");
-    loop {}
-}
-
-#[no_mangle]
-extern "C" fn double_fault_handler() {
-    crate::error!("Double fault exception");
-    loop {}
-}
-
-#[no_mangle]
-extern "C" fn general_protection_handler() {
-    crate::error!("General protection fault");
-    loop {}
-}
-
-#[no_mangle]
-extern "C" fn page_fault_handler() {
-    let mut cr2: u64;
-    unsafe {
-        asm!("mov {}, cr2", out(reg) cr2);
-    }
-    crate::error!("Page fault at address 0x{:x}", cr2);
-    loop {}
-}
-
 /// System call interrupt handler
 #[no_mangle]
 pub extern "C" fn syscall_handler() {
@@ -547,7 +394,7 @@ pub extern "C" fn syscall_handler() {
     let mut arg5: u64;
     
     unsafe {
-        asm!(
+        core::arch::asm!(
             "mov {0}, rax",
             "mov {1}, rdi", 
             "mov {2}, rsi",
@@ -572,13 +419,13 @@ pub extern "C" fn syscall_handler() {
     
     // Return result in register (rax)
     unsafe {
-        asm!(
+        core::arch::asm!(
             "mov rax, {0}",
             in(reg) result,
         );
         
         // Return from interrupt
-        asm!("iretq", options(noreturn));
+        core::arch::asm!("iretq", options(noreturn));
     }
 }
 

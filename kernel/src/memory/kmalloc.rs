@@ -93,6 +93,9 @@ static SLAB_ALLOCATOR: Spinlock<SlabAllocator> = Spinlock::new(SlabAllocator::ne
 
 /// Allocate kernel memory
 pub fn kmalloc(size: usize) -> Result<*mut u8> {
+    // Increment performance counter
+    crate::perf::counters::inc_memory_allocs();
+    
     if size == 0 {
         return Err(Error::InvalidArgument);
     }

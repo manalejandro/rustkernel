@@ -21,3 +21,8 @@ default = []
 alloc = []
 smp = []  # Symmetric Multi-Processing
 debug = []
+
+[build-dependencies]
+cc = "1.0"
+
+# Profile configuration moved to workspace root

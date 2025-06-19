@@ -9,7 +9,7 @@ license = "GPL-2.0"
 [workspace]
 members = [
     "kernel",
-    "drivers",
+    "drivers", 
     "modules"
 ]
 
@@ -19,20 +19,12 @@ kernel = { path = "kernel" }
 [dependencies]
 kernel = { path = "kernel" }
 
-[lib]
-name = "rust_kernel"
-crate-type = ["staticlib", "cdylib"]
-
-[features]
-default = ["alloc", "std"]
-alloc = []
-std = []
-no_std = []
-
+# Workspace-level profile configuration
 [profile.dev]
 panic = "abort"
 opt-level = 0
 debug = true
+lto = false
 
 [profile.release]
 panic = "abort"

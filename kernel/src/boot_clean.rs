@@ -79,7 +79,6 @@ pub unsafe fn update_boot_info<F>(f: F) where F: FnOnce(&mut BootInfo) {
 pub mod multiboot {
     use crate::types::{PhysAddr, VirtAddr};
     use crate::error::Result;
-    use crate::info;
 
     /// Multiboot2 information structure
     #[repr(C)]
@@ -219,25 +218,4 @@ pub fn complete_boot() -> Result<()> {
     set_boot_stage(BootStage::Complete);
     info!("Boot process completed successfully");
     Ok(())
-}
-
-/// Initialize multiboot information
-/// This should be called at the very beginning of kernel execution
-pub fn multiboot_init() {
-    // TODO: Parse multiboot information from bootloader
-    // For now, initialize with default values
-    unsafe {
-        BOOT_INFO = BootInfo {
-            memory_size: 512 * 1024 * 1024, // 512MB default
-            available_memory: 480 * 1024 * 1024, // 480MB available
-            cpu_count: 1,
-            boot_time: 0,
-            command_line: None,
-            initrd_start: None,
-            initrd_size: None,
-            multiboot_addr: None,
-        };
-    }
-    
-    info!("Multiboot information initialized");
 }

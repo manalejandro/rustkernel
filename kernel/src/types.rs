@@ -153,11 +153,33 @@ pub struct Irq(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Jiffies(pub u64);
 
+impl Jiffies {
+    pub fn as_u64(self) -> u64 {
+        self.0
+    }
+}
+
 impl Mul<u64> for Jiffies {
     type Output = u64;
     
     fn mul(self, rhs: u64) -> Self::Output {
         self.0 * rhs
+    }
+}
+
+impl core::ops::Add<u64> for Jiffies {
+    type Output = Jiffies;
+    
+    fn add(self, rhs: u64) -> Self::Output {
+        Jiffies(self.0 + rhs)
+    }
+}
+
+impl core::ops::Sub<Jiffies> for Jiffies {
+    type Output = Jiffies;
+    
+    fn sub(self, rhs: Jiffies) -> Self::Output {
+        Jiffies(self.0.saturating_sub(rhs.0))
     }
 }
 
