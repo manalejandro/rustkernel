@@ -69,7 +69,7 @@ impl CpuInfo {
 			unsafe {
 				asm!("mov {ebx_save}, rbx",
                      "cpuid", 
-                     "mov {ebx_out}, ebx",
+                     "mov {ebx_out:e}, ebx",
                      "mov rbx, {ebx_save}",
                      ebx_save = out(reg) _,
                      ebx_out = out(reg) ebx,
@@ -144,7 +144,7 @@ impl CpuInfo {
 
 			asm!("mov {ebx_save}, rbx",
                  "cpuid", 
-                 "mov {ebx_out}, ebx",
+                 "mov {ebx_out:e}, ebx",
                  "mov rbx, {ebx_save}",
                  ebx_save = out(reg) _,
                  ebx_out = out(reg) vendor_ebx,

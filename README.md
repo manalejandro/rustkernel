@@ -92,11 +92,11 @@ make clean && RUSTFLAGS="-Awarnings" make kernel
 ### Basic Execution
 ```bash
 # Run kernel in QEMU (basic)
-qemu-system-x86_64 -kernel target/release/rust-kernel
+qemu-system-x86_64 -kernel kernel/target/x86_64-unknown-none/release/rust-kernel
 
 # Run with more memory and serial output
 qemu-system-x86_64 \
-    -kernel target/release/rust-kernel \
+    -kernel kernel/target/x86_64-unknown-none/release/rust-kernel \
     -m 128M \
     -serial stdio \
     -no-reboot \
@@ -107,7 +107,7 @@ qemu-system-x86_64 \
 ```bash
 # Full-featured QEMU run with debugging
 qemu-system-x86_64 \
-    -kernel target/release/rust-kernel \
+    -kernel kernel/target/x86_64-unknown-none/release/rust-kernel \
     -m 256M \
     -smp 2 \
     -serial stdio \
@@ -124,13 +124,13 @@ qemu-system-x86_64 \
 ```bash
 # Run QEMU with GDB server
 qemu-system-x86_64 \
-    -kernel target/release/rust-kernel \
+    -kernel kernel/target/x86_64-unknown-none/release/rust-kernel \
     -s -S \
     -m 128M \
     -serial stdio
 
 # In another terminal, connect GDB
-gdb target/release/rust-kernel
+gdb kernel/target/x86_64-unknown-none/release/rust-kernel
 (gdb) target remote localhost:1234
 (gdb) continue
 ```

@@ -194,12 +194,15 @@ impl MountNamespace {
 }
 
 /// Global mount namespace
-static INIT_MNT_NS: once_cell::sync::Lazy<Mutex<MountNamespace>> =
-	once_cell::sync::Lazy::new(|| Mutex::new(MountNamespace::new(1)));
+static INIT_MNT_NS: spin::once::Once<Mutex<MountNamespace>> = spin::once::Once::new();
+
+fn get_init_mnt_ns() -> &'static Mutex<MountNamespace> {
+	INIT_MNT_NS.call_once(|| Mutex::new(MountNamespace::new(1)))
+}
 
 /// Get the init mount namespace
 pub fn get_init_ns() -> &'static Mutex<MountNamespace> {
-	&INIT_MNT_NS
+	get_init_mnt_ns()
 }
 
 /// Mount a filesystem

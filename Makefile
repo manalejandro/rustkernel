@@ -29,7 +29,7 @@ all: kernel modules drivers
 # Build the core kernel
 kernel:
 	@echo "Building Rust kernel ($(ARCH), $(BUILD_TYPE))"
-	$(CARGO) build $(CARGO_FLAGS)
+	cd kernel && $(CARGO) build $(CARGO_FLAGS) --target x86_64-unknown-none -Z build-std=core,alloc
 
 # Build kernel modules
 modules: $(RUST_MODULES)

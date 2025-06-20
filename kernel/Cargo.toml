@@ -10,11 +10,14 @@ license = "GPL-2.0"
 name = "kernel"
 crate-type = ["rlib"]
 
+[[bin]]
+name = "rust-kernel"
+path = "src/main.rs"
+
 [dependencies]
 spin = "0.9"
 bitflags = "2.4"
 linked_list_allocator = "0.10"
-once_cell = { version = "1.19", default-features = false, features = ["critical-section"] }
 
 [features]
 default = []

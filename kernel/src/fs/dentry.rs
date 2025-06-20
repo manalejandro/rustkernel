@@ -257,25 +257,28 @@ impl DentryCache {
 }
 
 /// Global dentry cache
-static DCACHE: once_cell::sync::Lazy<DentryCache> =
-	once_cell::sync::Lazy::new(|| DentryCache::new());
+static DCACHE: spin::once::Once<DentryCache> = spin::once::Once::new();
+
+fn get_dcache() -> &'static DentryCache {
+	DCACHE.call_once(|| DentryCache::new())
+}
 
 /// Look up dentry in cache
 pub fn dcache_lookup(path: &str) -> Option<Arc<Dentry>> {
-	DCACHE.lookup(path)
+	get_dcache().lookup(path)
 }
 
 /// Insert dentry into cache
 pub fn dcache_insert(path: String, dentry: Arc<Dentry>) {
-	DCACHE.insert(path, dentry);
+	get_dcache().insert(path, dentry);
 }
 
 /// Remove dentry from cache
 pub fn dcache_remove(path: &str) -> Option<Arc<Dentry>> {
-	DCACHE.remove(path)
+	get_dcache().remove(path)
 }
 
 /// Prune dentry cache
 pub fn dcache_prune() {
-	DCACHE.prune();
+	get_dcache().prune();
 }

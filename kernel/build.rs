@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: GPL-2.0
 
-fn main() {
-	// Build assembly files with rustc
-	println!("cargo:rerun-if-changed=src/arch/x86_64/boot.s");
-	println!("cargo:rerun-if-changed=src/arch/x86_64/exceptions.s");
-	println!("cargo:rerun-if-changed=linker.ld");
+use std::env;
+use std::fs;
+use std::path::PathBuf;
 
-	// Tell Cargo to link against the linker script
-	println!("cargo:rustc-link-arg=-Tlinker.ld");
+fn main() {
+	println!("cargo:rerun-if-changed=linker.ld");
+	
+	let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+	// Copy linker script to OUT_DIR so the linker can find it
+	let linker_script = out_dir.join("linker.ld");
+	fs::copy("linker.ld", &linker_script)
+		.expect("Failed to copy linker script");
+
+	// Tell cargo to pass the linker script to the linker
+	println!("cargo:rustc-link-arg=-T{}", linker_script.display());
 }
