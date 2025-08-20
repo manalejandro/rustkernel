@@ -231,8 +231,27 @@ impl KernelShell {
 		info!("  Total pages: {}", total);
 		info!("  Allocated pages: {}", allocated);
 		info!("  Free pages: {}", free);
+		info!(
+			"  Memory usage: {} / {} KB",
+			(allocated * 4096) / 1024,
+			(total * 4096) / 1024
+		);
 
-		// TODO: Add more memory statistics (kmalloc, vmalloc, etc.)
+		let (kmalloc_alloc_count, kmalloc_alloc_bytes, kmalloc_free_count) =
+			crate::memory::kmalloc::get_stats();
+		info!("\nKmalloc (slab) statistics:");
+		info!(
+			"  Allocated: {} blocks ({} bytes)",
+			kmalloc_alloc_count, kmalloc_alloc_bytes
+		);
+		info!("  Free: {} blocks", kmalloc_free_count);
+
+		let (vmalloc_areas, vmalloc_bytes) = crate::memory::vmalloc::get_stats();
+		info!("\nVmalloc statistics:");
+		info!(
+			"  Allocated: {} areas ({} bytes)",
+			vmalloc_areas, vmalloc_bytes
+		);
 	}
 
 	/// Process command
@@ -258,8 +277,7 @@ impl KernelShell {
 
 	/// Clear command
 	fn cmd_clear(&self) {
-		// TODO: Clear console screen
-		info!("Clear screen not implemented yet");
+		crate::console::clear();
 	}
 
 	/// Network command

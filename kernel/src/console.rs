@@ -267,6 +267,12 @@ pub fn write_str(s: &str) {
 	console.write_str(s);
 }
 
+/// Clear the console screen
+pub fn clear() {
+	let mut console = CONSOLE.lock();
+	console.clear_screen();
+}
+
 struct ConsoleWriter<'a>(&'a mut Console);
 
 impl Write for ConsoleWriter<'_> {

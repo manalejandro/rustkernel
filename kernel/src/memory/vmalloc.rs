@@ -128,9 +128,23 @@ impl VmallocAllocator {
 		self.next_addr = addr + size;
 		Ok(addr)
 	}
+
+	pub fn stats(&self) -> (usize, usize) {
+		let mut allocated_bytes = 0;
+		for (_, area) in &self.areas {
+			allocated_bytes += area.size;
+		}
+		(self.areas.len(), allocated_bytes)
+	}
 }
 
 static VMALLOC_ALLOCATOR: Spinlock<VmallocAllocator> = Spinlock::new(VmallocAllocator::new());
+
+/// Get vmalloc statistics
+pub fn get_stats() -> (usize, usize) {
+	let allocator = VMALLOC_ALLOCATOR.lock();
+	allocator.stats()
+}
 
 /// Allocate virtual memory
 pub fn vmalloc(size: usize) -> Result<VirtAddr> {
