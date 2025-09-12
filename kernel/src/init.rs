@@ -8,13 +8,6 @@ use crate::{error, info, warn};
 
 /// Early kernel initialization
 pub fn early_init() {
-	// Initialize basic networking
-	if let Err(e) = crate::network_stub::init() {
-		error!("Failed to initialize networking: {}", e);
-		panic!("Networking initialization failed");
-	}
-	info!("Basic networking initialized");
-
 	info!("Starting Rust Kernel v{}", crate::VERSION);
 	info!("Early initialization phase");
 
@@ -182,12 +175,12 @@ pub fn main_init() -> ! {
 	}
 	info!("Kernel shell initialized");
 
-	// Initialize basic networking
-	if let Err(e) = crate::net_basic::init_networking() {
+	// Initialize networking
+	if let Err(e) = crate::network::init() {
 		error!("Failed to initialize networking: {}", e);
 		panic!("Networking initialization failed");
 	}
-	info!("Basic networking initialized");
+	info!("Networking initialized");
 
 	// Initialize module loading system
 	if let Err(e) = crate::module_loader::init_modules() {

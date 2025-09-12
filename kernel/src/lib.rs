@@ -41,10 +41,9 @@ pub mod memfs; // In-memory file system
 pub mod memory;
 pub mod module;
 pub mod module_loader; // Dynamic module loading
-pub mod net_basic; // Basic networking support
 pub mod network;
-pub mod network_stub; // Basic network stub
-		      // pub mod network_advanced;  // Advanced networking stack (removed for now)
+pub mod arp;
+pub mod icmp;
 pub mod advanced_perf; // Advanced performance monitoring and profiling
 pub mod panic;
 pub mod perf; // Performance monitoring

@@ -148,7 +148,7 @@ impl PciDeviceId {
 }
 
 /// PCI device structure
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PciDevice {
 	pub vendor: u16,
 	pub device: u16,
@@ -379,6 +379,10 @@ macro_rules! platform_driver {
 			$crate::driver::unregister_driver(stringify!($driver)).ok();
 		}
 	};
+}
+
+pub fn pci_config_read(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
+    crate::hardware::pci_config_read(bus, device, function, offset)
 }
 
 #[macro_export]

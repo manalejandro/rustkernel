@@ -43,6 +43,8 @@ pub enum Error {
 	NotInitialized, // New error variant
 	/// Network unreachable
 	NetworkUnreachable,
+	/// Network is down
+	NetworkDown,
 	/// Device not found
 	DeviceNotFound,
 	/// Out of memory (ENOMEM)
@@ -124,6 +126,7 @@ impl Error {
 			Error::ECHILD => -10,              // ECHILD
 			Error::ESRCH => -3,                // ESRCH
 			Error::NetworkUnreachable => -101, // ENETUNREACH
+			Error::NetworkDown => -100,        // ENETDOWN
 			Error::DeviceNotFound => -19,      // ENODEV
 			Error::ENOMEM => -12,              // ENOMEM
 			Error::EHOSTUNREACH => -113,       // EHOSTUNREACH
@@ -152,6 +155,7 @@ impl fmt::Display for Error {
 			Error::Timeout => write!(f, "Operation timed out"),
 			Error::NotInitialized => write!(f, "Not initialized"),
 			Error::NetworkUnreachable => write!(f, "Network unreachable"),
+			Error::NetworkDown => write!(f, "Network is down"),
 			Error::DeviceNotFound => write!(f, "Device not found"),
 			Error::ENOMEM => write!(f, "Out of memory"),
 			Error::EHOSTUNREACH => write!(f, "Host unreachable"),
