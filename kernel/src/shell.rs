@@ -231,8 +231,27 @@ impl KernelShell {
 		info!("  Total pages: {}", total);
 		info!("  Allocated pages: {}", allocated);
 		info!("  Free pages: {}", free);
+		info!(
+			"  Memory usage: {} / {} KB",
+			(allocated * 4096) / 1024,
+			(total * 4096) / 1024
+		);
 
-		// TODO: Add more memory statistics (kmalloc, vmalloc, etc.)
+		let (kmalloc_alloc_count, kmalloc_alloc_bytes, kmalloc_free_count) =
+			crate::memory::kmalloc::get_stats();
+		info!("\nKmalloc (slab) statistics:");
+		info!(
+			"  Allocated: {} blocks ({} bytes)",
+			kmalloc_alloc_count, kmalloc_alloc_bytes
+		);
+		info!("  Free: {} blocks", kmalloc_free_count);
+
+		let (vmalloc_areas, vmalloc_bytes) = crate::memory::vmalloc::get_stats();
+		info!("\nVmalloc statistics:");
+		info!(
+			"  Allocated: {} areas ({} bytes)",
+			vmalloc_areas, vmalloc_bytes
+		);
 	}
 
 	/// Process command
@@ -258,49 +277,84 @@ impl KernelShell {
 
 	/// Clear command
 	fn cmd_clear(&self) {
-		// TODO: Clear console screen
-		info!("Clear screen not implemented yet");
+		crate::console::clear();
 	}
 
 	/// Network command
 	fn cmd_network(&self, args: &[&str]) {
 		if args.is_empty() {
-			info!("Network commands: stats, test");
+			info!("Network commands: stats, ping <ip>");
 			return;
 		}
 
 		match args[0] {
 			"stats" => {
 				info!("Network interface statistics:");
-				if let Some(stats) = crate::net_basic::get_net_stats("lo") {
-					info!("  lo (loopback):");
-					info!(
-						"    TX: {} packets, {} bytes",
-						stats.tx_packets, stats.tx_bytes
-					);
-					info!(
-						"    RX: {} packets, {} bytes",
-						stats.rx_packets, stats.rx_bytes
-					);
-					info!(
-						"    Errors: TX {}, RX {}",
-						stats.tx_errors, stats.rx_errors
-					);
-				} else {
-					warn!("Failed to get loopback statistics");
+				let mut stack = crate::network::NETWORK_STACK.lock();
+				if let Some(ref mut stack) = *stack {
+					for iface_name in stack.list_interfaces() {
+						if let Some(stats) = stack.get_interface_stats(&iface_name) {
+							info!("  {}:", iface_name);
+							info!(
+								"    TX: {} packets, {} bytes",
+								stats.packets_sent, stats.bytes_sent
+							);
+							info!(
+								"    RX: {} packets, {} bytes",
+								stats.packets_received, stats.bytes_received
+							);
+							info!(
+								"    Errors: {}, Dropped: {}",
+								stats.errors, stats.dropped
+							);
+						}
+					}
 				}
 			}
-			"test" => {
-				info!("Running network tests...");
-				if let Err(e) = crate::net_basic::test_networking() {
-					error!("Network tests failed: {}", e);
+			"ping" => {
+				if args.len() < 2 {
+					info!("Usage: net ping <ip>");
+					return;
+				}
+				let ip_str = args[1];
+				let parts: Vec<&str> = ip_str.split('.').collect();
+				if parts.len() != 4 {
+					info!("Invalid IP address format");
+					return;
+				}
+				let mut bytes = [0u8; 4];
+				for i in 0..4 {
+					if let Ok(byte) = parts[i].parse() {
+						bytes[i] = byte;
+					} else {
+						info!("Invalid IP address format");
+						return;
+					}
+				}
+				let dest_ip = crate::network::Ipv4Address::from_bytes(bytes);
+
+				let mut icmp_packet = crate::icmp::IcmpPacket {
+					icmp_type: crate::icmp::IcmpType::EchoRequest,
+					icmp_code: crate::icmp::IcmpCode::Echo,
+					checksum: 0,
+					identifier: 0,
+					sequence_number: 0,
+				};
+
+                let mut data = icmp_packet.to_bytes();
+				let checksum = crate::network::utils::calculate_checksum(&data);
+				icmp_packet.checksum = checksum;
+                data = icmp_packet.to_bytes();
+
+				if let Err(e) = crate::network::send_packet(dest_ip, &data, crate::network::ProtocolType::ICMP) {
+					error!("Failed to send ping: {}", e);
 				} else {
-					info!("Network tests passed!");
+					info!("Ping sent to {}", dest_ip);
 				}
 			}
 			_ => {
 				info!(
-					"Unknown network command: {}. Available: stats, test",
+					"Unknown network command: {}. Available: stats, ping",
 					args[0]
 				);
 			}

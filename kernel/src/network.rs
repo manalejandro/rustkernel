@@ -2,7 +2,7 @@
 
 //! Network stack implementation
 
-use alloc::{boxed::Box, collections::BTreeMap, string::String, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeMap, collections::VecDeque, string::{String, ToString}, vec::Vec};
 use core::fmt;
 
 use crate::error::{Error, Result};
@@ -219,6 +219,7 @@ impl NetworkBuffer {
 /// Network interface
 pub trait NetworkInterface: Send + Sync {
 	fn name(&self) -> &str;
+	fn ip_address(&self) -> Option<Ipv4Address>;
 	fn mac_address(&self) -> MacAddress;
 	fn mtu(&self) -> u16;
 	fn is_up(&self) -> bool;
@@ -241,12 +242,82 @@ pub struct InterfaceStats {
 	pub dropped: u64,
 }
 
+/// A loopback network interface.
+#[derive(Debug)]
+pub struct LoopbackInterface {
+    rx_queue: VecDeque<NetworkBuffer>,
+    up: bool,
+}
+
+impl LoopbackInterface {
+    pub fn new() -> Self {
+        Self {
+            rx_queue: VecDeque::new(),
+            up: true,
+        }
+    }
+}
+
+impl NetworkInterface for LoopbackInterface {
+    fn name(&self) -> &str {
+        "lo"
+    }
+
+    fn ip_address(&self) -> Option<Ipv4Address> {
+        Some(Ipv4Address::localhost())
+    }
+
+    fn mac_address(&self) -> MacAddress {
+        MacAddress::zero()
+    }
+
+    fn mtu(&self) -> u16 {
+        65535
+    }
+
+    fn is_up(&self) -> bool {
+        self.up
+    }
+
+    fn send_packet(&mut self, buffer: &NetworkBuffer) -> Result<()> {
+        if !self.up {
+            return Err(Error::NetworkDown);
+        }
+        self.rx_queue.push_back(buffer.clone());
+        Ok(())
+    }
+
+    fn receive_packet(&mut self) -> Result<Option<NetworkBuffer>> {
+        if !self.up {
+            return Ok(None);
+        }
+        Ok(self.rx_queue.pop_front())
+    }
+
+    fn set_up(&mut self, up: bool) -> Result<()> {
+        self.up = up;
+        Ok(())
+    }
+
+    fn set_mac_address(&mut self, _mac: MacAddress) -> Result<()> {
+        // The loopback interface doesn't have a real MAC address.
+        Ok(())
+    }
+}
+
 /// Network stack
+struct PendingArpRequest {
+    packet: NetworkBuffer,
+    ip: Ipv4Address,
+    timestamp: u64,
+}
+
 pub struct NetworkStack {
 	interfaces: BTreeMap<String, Box<dyn NetworkInterface>>,
 	interface_stats: BTreeMap<String, InterfaceStats>,
 	routing_table: Vec<RouteEntry>,
 	arp_table: BTreeMap<Ipv4Address, MacAddress>,
+    pending_arp_requests: Vec<PendingArpRequest>,
 }
 
 /// Routing table entry
@@ -266,6 +337,7 @@ impl NetworkStack {
 			interface_stats: BTreeMap::new(),
 			routing_table: Vec::new(),
 			arp_table: BTreeMap::new(),
+            pending_arp_requests: Vec::new(),
 		}
 	}
 
@@ -332,6 +404,10 @@ impl NetworkStack {
 		data: &[u8],
 		protocol: ProtocolType,
 	) -> Result<()> {
+        // Clean up timed out ARP requests
+        let now = crate::time::get_time_ns();
+        self.pending_arp_requests.retain(|req| now - req.timestamp < 10_000_000_000); // 10 seconds
+
 		// Find route (borrow self immutably)
 		let route = {
 			let route = self.find_route(dest).ok_or(Error::NetworkUnreachable)?;
@@ -340,9 +416,46 @@ impl NetworkStack {
 
 		// Look up MAC address first (borrow self immutably)
 		let dest_mac = if let Some(gateway) = route.gateway {
-			self.lookup_arp(gateway).ok_or(Error::NetworkUnreachable)?
+			self.lookup_arp(gateway)
 		} else {
-			self.lookup_arp(dest).ok_or(Error::NetworkUnreachable)?
+			self.lookup_arp(dest)
+		};
+
+		let dest_mac = if let Some(mac) = dest_mac {
+			mac
+		} else {
+			// ARP lookup failed, send an ARP request and queue the packet
+			let interface = self
+				.get_interface(&route.interface)
+				.ok_or(Error::DeviceNotFound)?;
+			let arp_request = crate::arp::ArpPacket::new(
+				crate::arp::ArpOperation::Request,
+				interface.mac_address(),
+				interface.ip_address().unwrap_or(Ipv4Address::any()),
+				MacAddress::zero(),
+				dest,
+			);
+			let mut buffer = NetworkBuffer::new(28);
+			buffer.set_protocol(ProtocolType::ARP);
+			buffer.set_mac_addresses(interface.mac_address(), MacAddress::broadcast());
+			buffer.extend_from_slice(&arp_request.to_bytes())?;
+			let interface_mut = self
+				.get_interface_mut(&route.interface)
+				.ok_or(Error::DeviceNotFound)?;
+			interface_mut.send_packet(&buffer)?;
+
+            // Queue the original packet
+            let mut packet_to_queue = NetworkBuffer::new(data.len());
+            packet_to_queue.extend_from_slice(data)?;
+            packet_to_queue.set_protocol(protocol);
+            packet_to_queue.set_ip_addresses(Ipv4Address::any(), dest); // TODO: Set source IP
+            self.pending_arp_requests.push(PendingArpRequest {
+                packet: packet_to_queue,
+                ip: dest,
+                timestamp: crate::time::get_time_ns(),
+            });
+
+			return Ok(()); // We'll have to wait for the reply
 		};
 
 		// Get interface MAC address
@@ -376,24 +489,110 @@ impl NetworkStack {
 		Ok(())
 	}
 
-	pub fn receive_packets(&mut self) -> Result<Vec<NetworkBuffer>> {
-		let mut packets = Vec::new();
+	pub fn receive_and_handle_packets(&mut self) -> Result<Vec<NetworkBuffer>> {
+		let mut received_packets = Vec::new();
+        let mut unhandled_packets = Vec::new();
 
+		// First, receive all packets from all interfaces
 		for (name, interface) in &mut self.interfaces {
 			while let Some(packet) = interface.receive_packet()? {
 				if let Some(stats) = self.interface_stats.get_mut(name) {
 					stats.packets_received += 1;
 					stats.bytes_received += packet.len() as u64;
 				}
-				packets.push(packet);
+				received_packets.push((name.clone(), packet));
 			}
 		}
 
-		Ok(packets)
+		// Now, process the received packets
+		for (interface_name, packet) in received_packets {
+			if packet.protocol == ProtocolType::ARP {
+				if let Ok(arp_packet) = crate::arp::ArpPacket::from_bytes(packet.data()) {
+					self.handle_arp_packet(&arp_packet, &interface_name)?;
+				}
+			} else if packet.protocol == ProtocolType::ICMP {
+				if let Some(source_ip) = packet.source_ip {
+					self.handle_icmp_packet(source_ip, packet.data())?;
+				}
+			} else {
+				unhandled_packets.push(packet);
+			}
+		}
+
+		Ok(unhandled_packets)
+	}
+
+	pub fn receive_packets(&mut self) -> Result<Vec<NetworkBuffer>> {
+		self.receive_and_handle_packets()
 	}
 
 	pub fn get_interface_stats(&self, name: &str) -> Option<&InterfaceStats> {
 		self.interface_stats.get(name)
+	}
+
+	fn handle_arp_packet(&mut self, packet: &crate::arp::ArpPacket, interface_name: &str) -> Result<()> {
+		// Add the sender to the ARP table
+		self.add_arp_entry(packet.spa, packet.sha);
+
+		// If it's a request for us, send a reply
+		if u16::from_be_bytes(packet.oper) == crate::arp::ArpOperation::Request as u16 {
+			if let Some(interface) = self.get_interface(interface_name) {
+				if let Some(ip_addr) = interface.ip_address() {
+					if ip_addr == packet.tpa {
+						let reply = crate::arp::ArpPacket::new(
+							crate::arp::ArpOperation::Reply,
+							interface.mac_address(),
+							ip_addr,
+							packet.sha,
+							packet.spa,
+						);
+						let mut buffer = NetworkBuffer::new(28);
+						buffer.set_protocol(ProtocolType::ARP);
+						buffer.set_mac_addresses(interface.mac_address(), packet.sha);
+						buffer.extend_from_slice(&reply.to_bytes())?;
+						if let Some(interface) = self.get_interface_mut(interface_name) {
+							interface.send_packet(&buffer)?;
+						}
+					}
+				}
+			}
+		}
+
+        // Check for pending packets
+        let mut packets_to_send = Vec::new();
+        let mut still_pending = Vec::new();
+        for pending in self.pending_arp_requests.drain(..) {
+            if pending.ip == packet.spa {
+                packets_to_send.push(pending);
+            } else {
+                still_pending.push(pending);
+            }
+        }
+        self.pending_arp_requests = still_pending;
+
+        for pending in packets_to_send {
+            self.send_packet(pending.ip, pending.packet.data(), pending.packet.protocol)?;
+        }
+
+		Ok(())
+	}
+
+	fn handle_icmp_packet(&mut self, source_ip: Ipv4Address, packet: &[u8]) -> Result<()> {
+		if packet.len() < 8 {
+			return Err(Error::InvalidArgument);
+		}
+		let icmp_type = packet[0];
+		if icmp_type == crate::icmp::IcmpType::EchoRequest as u8 {
+			let mut reply = packet.to_vec();
+			reply[0] = crate::icmp::IcmpType::EchoReply as u8;
+			// Recalculate checksum
+			let checksum = utils::calculate_checksum(&reply);
+			reply[2] = (checksum >> 8) as u8;
+			reply[3] = (checksum & 0xFF) as u8;
+
+			self.send_packet(source_ip, &reply, ProtocolType::ICMP)?;
+		}
+		Ok(())
 	}
 }
 
@@ -403,7 +602,25 @@ pub static NETWORK_STACK: Spinlock<Option<NetworkStack>> = Spinlock::new(None);
 /// Initialize network stack
 pub fn init() -> Result<()> {
 	let mut stack = NETWORK_STACK.lock();
-	*stack = Some(NetworkStack::new());
+	let mut network_stack = NetworkStack::new();
+
+	// Add loopback interface
+	let loopback = LoopbackInterface::new();
+	network_stack.add_interface("lo".to_string(), Box::new(loopback));
+
+	// Add route for loopback
+	network_stack.add_route(RouteEntry {
+		destination: Ipv4Address::new(127, 0, 0, 0),
+		netmask: Ipv4Address::new(255, 0, 0, 0),
+		gateway: None,
+		interface: "lo".to_string(),
+		metric: 0,
+	});
+
+	// Add ARP entry for loopback
+	network_stack.add_arp_entry(Ipv4Address::localhost(), MacAddress::zero());
+
+	*stack = Some(network_stack);
 	crate::info!("Network stack initialized");
 	Ok(())
 }
@@ -417,6 +634,30 @@ pub fn add_network_interface(name: String, interface: Box<dyn NetworkInterface>)
 	} else {
 		Err(Error::NotInitialized)
 	}
+}
+
+pub mod utils {
+    /// Calculate checksum
+    pub fn calculate_checksum(data: &[u8]) -> u16 {
+        let mut sum = 0u32;
+
+        // Sum all 16-bit words
+        for chunk in data.chunks(2) {
+            if chunk.len() == 2 {
+                sum += ((chunk[0] as u32) << 8) + (chunk[1] as u32);
+            } else {
+                sum += (chunk[0] as u32) << 8;
+            }
+        }
+
+        // Add carry
+        while sum >> 16 != 0 {
+            sum = (sum & 0xFFFF) + (sum >> 16);
+        }
+
+        // One's complement
+        !sum as u16
+    }
 }
 
 /// Send a packet

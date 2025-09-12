@@ -90,9 +90,31 @@ impl SlabAllocator {
 			Err(Error::InvalidArgument)
 		}
 	}
+
+	pub fn stats(&self) -> (usize, usize, usize) {
+		let mut allocated_count = 0;
+		let mut allocated_bytes = 0;
+		for (_, size_class) in &self.allocated_blocks {
+			allocated_count += 1;
+			allocated_bytes += size_class;
+		}
+
+		let mut free_count = 0;
+		for (_, free_list) in &self.size_classes {
+			free_count += free_list.len();
+		}
+
+		(allocated_count, allocated_bytes, free_count)
+	}
 }
 
 static SLAB_ALLOCATOR: Spinlock<SlabAllocator> = Spinlock::new(SlabAllocator::new());
+
+/// Get kmalloc statistics
+pub fn get_stats() -> (usize, usize, usize) {
+	let allocator = SLAB_ALLOCATOR.lock();
+	allocator.stats()
+}
 
 /// Allocate kernel memory
 pub fn kmalloc(size: usize) -> Result<*mut u8> {

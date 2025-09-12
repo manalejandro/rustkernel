@@ -7,7 +7,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::error::Result;
-
+use crate::driver::{PciDevice, PciBar};
 /// CPU Information
 #[derive(Debug, Clone)]
 pub struct CpuInfo {
@@ -31,19 +31,6 @@ pub struct SystemInfo {
 	pub boot_device: String,
 	pub acpi_available: bool,
 	pub pci_devices: Vec<PciDevice>,
-}
-
-/// PCI Device Information
-#[derive(Debug, Clone)]
-pub struct PciDevice {
-	pub bus: u8,
-	pub device: u8,
-	pub function: u8,
-	pub vendor_id: u16,
-	pub device_id: u16,
-	pub class: u8,
-	pub subclass: u8,
-	pub prog_if: u8,
 }
 
 /// Initialize hardware detection
@@ -193,16 +180,34 @@ pub fn detect_pci_devices() -> Result<Vec<PciDevice>> {
 				let device_id =
 					(pci_config_read(0, device, function, 0x00) >> 16) as u16;
 				let class_info = pci_config_read(0, device, function, 0x08);
+				let revision = (pci_config_read(0, device, function, 0x08) & 0xFF) as u8;
+				let mut bars = [PciBar::new(); 6];
+				for i in 0..6 {
+					let bar_val = pci_config_read(0, device, function, 0x10 + (i * 4));
+					if bar_val == 0 {
+						continue;
+					}
+					let is_io = bar_val & 1 != 0;
+					if is_io {
+						bars[i as usize].address = (bar_val & 0xFFFFFFFC) as u64;
+					} else {
+						bars[i as usize].address = (bar_val & 0xFFFFFFF0) as u64;
+					}
+					bars[i as usize].flags = bar_val & 0xF;
+				}
 
 				devices.push(PciDevice {
 					bus: 0,
-					device,
+					slot: device,
 					function,
-					vendor_id,
-					device_id,
-					class: (class_info >> 24) as u8,
-					subclass: (class_info >> 16) as u8,
-					prog_if: (class_info >> 8) as u8,
+					vendor: vendor_id,
+					device: device_id,
+					class: (class_info >> 16),
+					revision,
+					subsystem_vendor: 0, // Not implemented
+					subsystem_device: 0, // Not implemented
+					irq: 0, // Not implemented
+					bars,
 				});
 			}
 		}
@@ -212,7 +217,7 @@ pub fn detect_pci_devices() -> Result<Vec<PciDevice>> {
 }
 
 /// Read PCI configuration space
-fn pci_config_read(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
+pub(crate) fn pci_config_read(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
 	let address = 0x80000000u32
 		| ((bus as u32) << 16)
 		| ((device as u32) << 11)
