@@ -14,8 +14,8 @@ pub use kernel::*;
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn basic_test() {
-        assert_eq!(2 + 2, 4);
-    }
+	#[test]
+	fn basic_test() {
+		assert_eq!(2 + 2, 4);
+	}
 }

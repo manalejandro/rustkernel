@@ -10,10 +10,6 @@ license = "GPL-2.0"
 name = "kernel"
 crate-type = ["rlib"]
 
-[[bin]]
-name = "rust-kernel"
-path = "src/main.rs"
-
 [dependencies]
 spin = "0.9"
 bitflags = "2.4"

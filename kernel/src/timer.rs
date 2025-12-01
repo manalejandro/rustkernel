@@ -93,9 +93,10 @@ impl TimerState {
 					let mut stats = self.stats.lock();
 					stats.context_switches += 1;
 
-					// TODO: Actual context switching would happen here
-					// This would involve saving current CPU state and
-					// restoring the state of the next task
+					// Perform actual context switch
+					// This will save current CPU state and restore the state of the next task
+					crate::scheduler::context_switch_to(next_tid);
+
 					crate::info!(
 						"Context switch: {:?} -> {:?}",
 						current_tid,

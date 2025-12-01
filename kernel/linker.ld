@@ -40,6 +40,7 @@ SECTIONS
     /* Read-write data */
     .data : ALIGN(4K) {
         *(.data .data.*)
+        *(.got .got.*)
     } :data
     
     /* BSS section (uninitialized data) */

@@ -50,8 +50,8 @@ impl Task {
 		function: TaskFunction,
 		stack_size: usize,
 	) -> Result<Self> {
-		static NEXT_TID: AtomicU32 = AtomicU32::new(1);
-		let tid = Tid(NEXT_TID.fetch_add(1, Ordering::Relaxed));
+		// Use process subsystem to allocate TID to ensure uniqueness
+		let tid = crate::process::allocate_tid();
 
 		// Allocate stack
 		let stack_ptr = kmalloc::kmalloc(stack_size)?;
@@ -156,10 +156,18 @@ impl TaskManager {
 		function: TaskFunction,
 		stack_size: usize,
 	) -> Result<Tid> {
-		let task = Task::new_kernel_task(name, function, stack_size)?;
+		let task = Task::new_kernel_task(name.clone(), function, stack_size)?;
 		let tid = task.tid;
 
-		self.tasks.lock().push(task);
+		// Add to local task list
+		self.tasks.lock().push(task.clone());
+
+		// Add to PROCESS_TABLE so the low-level scheduler can find it
+		crate::process::add_kernel_thread(
+			tid,
+			task.context,
+			crate::memory::VirtAddr::new(task.context.rsp as usize),
+		)?;
 
 		// Add to enhanced scheduler
 		crate::enhanced_scheduler::add_task(

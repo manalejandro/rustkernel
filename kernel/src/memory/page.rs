@@ -2,7 +2,6 @@
 
 //! Page frame allocator
 
-use alloc::collections::BTreeSet;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::error::{Error, Result};
@@ -98,34 +97,57 @@ pub static PAGE_ALLOCATOR: Spinlock<PageAllocator> = Spinlock::new(PageAllocator
 
 /// Page allocator implementation
 pub struct PageAllocator {
-	free_pages: BTreeSet<Pfn>,
+	free_list_head: Option<PhysAddr>,
 	total_pages: usize,
 	allocated_pages: usize,
+	free_count: usize,
 }
 
 impl PageAllocator {
 	pub const fn new() -> Self {
 		Self {
-			free_pages: BTreeSet::new(),
+			free_list_head: None,
 			total_pages: 0,
 			allocated_pages: 0,
+			free_count: 0,
 		}
 	}
 
 	/// Add a range of pages to the free list
 	pub fn add_free_range(&mut self, start: Pfn, count: usize) {
 		for i in 0..count {
-			self.free_pages.insert(Pfn(start.0 + i));
+			let pfn = Pfn(start.0 + i);
+			let phys_addr = PhysAddr(pfn.0 * 4096);
+
+			// Store current head in the new page
+			// We can write to phys_addr because it's identity mapped
+			unsafe {
+				let ptr = phys_addr.0 as *mut u64;
+				*ptr = self.free_list_head.map(|a| a.0 as u64).unwrap_or(0);
+			}
+
+			// Update head
+			self.free_list_head = Some(phys_addr);
 		}
 		self.total_pages += count;
+		self.free_count += count;
 	}
 
 	/// Allocate a single page
 	fn alloc_page(&mut self) -> Result<Pfn> {
-		if let Some(pfn) = self.free_pages.iter().next().copied() {
-			self.free_pages.remove(&pfn);
+		if let Some(head_addr) = self.free_list_head {
+			// Read next ptr from head
+			let next_addr_u64 = unsafe { *(head_addr.0 as *const u64) };
+
+			self.free_list_head = if next_addr_u64 == 0 {
+				None
+			} else {
+				Some(PhysAddr(next_addr_u64 as usize))
+			};
+
 			self.allocated_pages += 1;
-			Ok(pfn)
+			self.free_count -= 1;
+			Ok(Pfn(head_addr.0 / 4096))
 		} else {
 			Err(Error::OutOfMemory)
 		}
@@ -133,18 +155,19 @@ impl PageAllocator {
 
 	/// Free a single page
 	fn free_page(&mut self, pfn: Pfn) {
-		if self.free_pages.insert(pfn) {
-			self.allocated_pages -= 1;
+		let phys_addr = PhysAddr(pfn.0 * 4096);
+		unsafe {
+			let ptr = phys_addr.0 as *mut u64;
+			*ptr = self.free_list_head.map(|a| a.0 as u64).unwrap_or(0);
 		}
+		self.free_list_head = Some(phys_addr);
+		self.allocated_pages -= 1;
+		self.free_count += 1;
 	}
 
 	/// Get statistics
 	fn stats(&self) -> (usize, usize, usize) {
-		(
-			self.total_pages,
-			self.allocated_pages,
-			self.free_pages.len(),
-		)
+		(self.total_pages, self.allocated_pages, self.free_count)
 	}
 }
 

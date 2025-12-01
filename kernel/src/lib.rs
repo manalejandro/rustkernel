@@ -18,6 +18,10 @@
 
 extern crate alloc;
 
+// Include boot assembly
+// #[cfg(target_arch = "x86_64")]
+// global_asm!(include_str!("arch/x86_64/boot.s"), options(att_syntax));
+
 pub mod arch;
 pub mod benchmark; // Performance benchmarking
 pub mod boot;
@@ -93,7 +97,7 @@ pub extern "C" fn kernel_main() -> ! {
 #[no_mangle]
 pub extern "C" fn kernel_main_multiboot(multiboot_magic: u32, multiboot_addr: u32) -> ! {
 	// Verify multiboot magic number
-	if multiboot_magic != 0x36d76289 {
+	if multiboot_magic != 0x36d76289 && multiboot_magic != 0x2BADB002 {
 		panic!("Invalid multiboot magic: 0x{:x}", multiboot_magic);
 	}
 
@@ -112,8 +116,8 @@ fn early_kernel_init() {
 		loop {}
 	}
 
-	info!("Rust Kernel v{} starting...", VERSION);
-	info!("Early kernel initialization");
+	crate::println!("Rust Kernel v{} starting...", VERSION);
+	crate::println!("Early kernel initialization");
 }
 
 /// Initialize memory management using multiboot information

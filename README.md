@@ -315,8 +315,8 @@ perf counters       # Show performance counters
 - **Memory Mapping**: Support for memory-mapped I/O and files
 
 ### Process & Task Management  
-- **Preemptive Scheduling**: Priority-based with round-robin
-- **Context Switching**: Full CPU context preservation
+- **Preemptive Scheduling**: Priority-based with round-robin and CFS (Completely Fair Scheduler)
+- **Context Switching**: Full CPU context preservation including GPRs, segment registers, and control registers
 - **Kernel Threads**: Lightweight kernel task execution
 - **Process States**: Running, ready, waiting, zombie states
 
@@ -360,6 +360,7 @@ perf counters       # Show performance counters
 
 ### 📋 **Future Enhancements**
 - [ ] SMP (multi-processor) support
+- [ ] ACPI (Advanced Configuration and Power Interface) support
 - [ ] Advanced file systems (ext2, FAT32)
 - [ ] Complete TCP/IP networking stack
 - [ ] Graphics and display support

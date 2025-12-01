@@ -8,6 +8,9 @@ set -e  # Exit on any error
 echo "=== Rust Kernel Build and Test Script ==="
 echo "Starting comprehensive build and validation..."
 
+# Enable unstable features on stable compiler
+export RUSTC_BOOTSTRAP=1
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -84,7 +87,7 @@ fi
 # Run Clippy lints (if available)
 print_status "Running Clippy lints..."
 if command -v cargo-clippy &> /dev/null; then
-    if RUSTFLAGS="-Awarnings" cargo clippy -- -D warnings > /tmp/clippy.log 2>&1; then
+    if cargo clippy -- -D warnings > /tmp/clippy.log 2>&1; then
         print_success "Clippy lints passed"
     else
         print_warning "Clippy found issues (continuing with build)"
@@ -97,18 +100,18 @@ fi
 
 # Build in debug mode
 print_status "Building kernel in debug mode..."
-run_with_status "RUSTFLAGS='-Awarnings' cargo check" "Debug build check"
+run_with_status "cargo check" "Debug build check"
 print_success "Debug build completed successfully"
 
 # Build in release mode
 print_status "Building kernel in release mode..."
-run_with_status "RUSTFLAGS='-Awarnings' cargo check --release" "Release build check"
+run_with_status "cargo check --release" "Release build check"
 print_success "Release build completed successfully"
 
 # Build with make (if Makefile exists)
 if [ -f "Makefile" ]; then
     print_status "Building with Makefile..."
-    run_with_status "RUSTFLAGS='-Awarnings' make kernel" "Makefile build"
+    run_with_status "make kernel" "Makefile build"
     print_success "Makefile build completed successfully"
 else
     print_warning "Makefile not found, skipping make build"
@@ -123,6 +126,15 @@ print_success "Documentation generated successfully"
 if [ -f "target/release/deps/kernel-"*.rlib ]; then
     KERNEL_SIZE=$(du -h target/release/deps/kernel-*.rlib | cut -f1)
     print_status "Kernel library size: $KERNEL_SIZE"
+fi
+
+# Create ISO
+print_status "Creating bootable ISO..."
+cp target/x86_64-unknown-none/release/rust-kernel iso/boot/rust-kernel
+if grub-mkrescue -o rust-kernel.iso iso > /dev/null 2>&1; then
+    print_success "ISO created: rust-kernel.iso"
+else
+    print_warning "Failed to create ISO (grub-mkrescue not found or failed)"
 fi
 
 # Create build report
@@ -198,7 +210,7 @@ print_status "Test suites available: 15+ test categories"
 
 echo ""
 echo "To test the kernel:"
-echo "  1. Boot in QEMU: qemu-system-x86_64 -kernel target/release/..."
+echo "  1. Boot in QEMU: qemu-system-x86_64 -cdrom rust-kernel.iso"
 echo "  2. Use shell commands like: 'test run', 'sysinfo', 'health'"
 echo "  3. Monitor system status with: 'diag', 'perf', 'mem'"
 

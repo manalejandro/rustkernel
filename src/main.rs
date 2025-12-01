@@ -9,8 +9,11 @@
 
 extern crate kernel;
 
-/// Main kernel entry point
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
-    kernel::kernel_main()
-}
+use core::arch::global_asm;
+
+// Include boot assembly
+#[cfg(target_arch = "x86_64")]
+global_asm!(
+	include_str!("../kernel/src/arch/x86_64/boot.s"),
+	options(att_syntax)
+);

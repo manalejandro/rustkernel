@@ -74,7 +74,9 @@ pub fn get_boot_info() -> &'static BootInfo {
 
 /// Update boot information
 pub unsafe fn update_boot_info<F>(f: F)
-where F: FnOnce(&mut BootInfo) {
+where
+	F: FnOnce(&mut BootInfo),
+{
 	f(&mut BOOT_INFO);
 }
 
@@ -114,7 +116,8 @@ pub mod multiboot {
 	pub struct BootMemoryInfo {
 		pub total_memory: u64,
 		pub available_memory: u64,
-		pub memory_regions: alloc::vec::Vec<MemoryMapEntry>,
+		pub memory_regions: [MemoryMapEntry; 32],
+		pub region_count: usize,
 	}
 
 	impl BootMemoryInfo {
@@ -122,7 +125,13 @@ pub mod multiboot {
 			Self {
 				total_memory: 0,
 				available_memory: 0,
-				memory_regions: alloc::vec::Vec::new(),
+				memory_regions: [MemoryMapEntry {
+					base_addr: 0,
+					length: 0,
+					type_: 0,
+					reserved: 0,
+				}; 32],
+				region_count: 0,
 			}
 		}
 
@@ -131,17 +140,20 @@ pub mod multiboot {
 				self.available_memory += entry.length;
 			}
 			self.total_memory += entry.length;
-			self.memory_regions.push(entry);
+			if self.region_count < 32 {
+				self.memory_regions[self.region_count] = entry;
+				self.region_count += 1;
+			}
 		}
 	}
 
 	/// Parse multiboot2 information and initialize memory management
 	pub fn init_memory_from_multiboot(multiboot_addr: usize) -> Result<()> {
-		info!("Parsing multiboot information at 0x{:x}", multiboot_addr);
+		crate::println!("Parsing multiboot information at 0x{:x}", multiboot_addr);
 
 		let multiboot_info = unsafe { &*(multiboot_addr as *const MultibootInfo) };
 
-		info!("Multiboot info size: {} bytes", multiboot_info.total_size);
+		crate::println!("Multiboot info size: {} bytes", multiboot_info.total_size);
 
 		// Parse memory map from multiboot info
 		let mut memory_info = BootMemoryInfo::new();
@@ -166,12 +178,13 @@ pub mod multiboot {
 		}
 
 		// Initialize page allocator with available memory
-		for region in &memory_info.memory_regions {
+		for i in 0..memory_info.region_count {
+			let region = &memory_info.memory_regions[i];
 			if region.type_ == memory_type::AVAILABLE {
 				let start_pfn = region.base_addr / 4096;
 				let end_pfn = (region.base_addr + region.length) / 4096;
 
-				info!(
+				crate::println!(
 					"Adding memory region: 0x{:x}-0x{:x}",
 					region.base_addr,
 					region.base_addr + region.length
@@ -185,9 +198,9 @@ pub mod multiboot {
 			}
 		}
 
-		info!("Memory initialization from multiboot completed");
-		info!("Total memory: {} bytes", memory_info.total_memory);
-		info!("Available memory: {} bytes", memory_info.available_memory);
+		crate::println!("Memory initialization from multiboot completed");
+		crate::println!("Total memory: {} bytes", memory_info.total_memory);
+		crate::println!("Available memory: {} bytes", memory_info.available_memory);
 
 		Ok(())
 	}

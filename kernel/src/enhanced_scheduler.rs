@@ -462,7 +462,9 @@ static ENHANCED_SCHEDULER: Spinlock<Option<EnhancedScheduler>> = Spinlock::new(N
 
 /// Helper to get scheduler reference safely
 fn with_scheduler<T, F>(f: F) -> Option<T>
-where F: FnOnce(&mut EnhancedScheduler) -> T {
+where
+	F: FnOnce(&mut EnhancedScheduler) -> T,
+{
 	let mut scheduler_option = ENHANCED_SCHEDULER.lock();
 	if let Some(ref mut scheduler) = *scheduler_option {
 		Some(f(scheduler))
@@ -473,7 +475,9 @@ where F: FnOnce(&mut EnhancedScheduler) -> T {
 
 /// Helper to get read-only scheduler reference safely
 fn with_scheduler_read<T, F>(f: F) -> Option<T>
-where F: FnOnce(&EnhancedScheduler) -> T {
+where
+	F: FnOnce(&EnhancedScheduler) -> T,
+{
 	let scheduler_option = ENHANCED_SCHEDULER.lock();
 	if let Some(ref scheduler) = *scheduler_option {
 		Some(f(scheduler))

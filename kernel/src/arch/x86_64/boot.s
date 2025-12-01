@@ -1,7 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0
 # Rust Kernel boot entry point for x86_64
 
-.section .multiboot_header
+.section .multiboot_header, "a"
+# Multiboot 1 Header
+.align 4
+    .long 0x1BADB002                # magic
+    .long 0x00000003                # flags (align + meminfo)
+    .long -(0x1BADB002 + 0x00000003) # checksum
+
+# Multiboot 2 Header
+.align 8
 header_start:
     # Multiboot2 header
     .long 0xe85250d6                # magic number
@@ -21,6 +29,8 @@ header_end:
 .section .bss
 multiboot_magic_store:
     .skip 4
+multiboot_info_store:
+    .skip 4
 # Stack for the kernel
 .global stack_bottom
 .global stack_top
@@ -30,16 +40,16 @@ stack_top:
 
 # Bootstrap page tables
 .align 4096
-.global boot_page_directory_ptr_table
-boot_page_directory_ptr_table:
+.global boot_pml4
+boot_pml4:
     .skip 4096
 
-.global boot_page_directory_table
-boot_page_directory_table:
+.global boot_pdp
+boot_pdp:
     .skip 4096
 
-.global boot_page_table
-boot_page_table:
+.global boot_pd
+boot_pd:
     .skip 4096
 
 .section .rodata
@@ -49,7 +59,7 @@ gdt64:
     .quad (1<<44) | (1<<47) | (1<<41) | (1<<43) | (1<<53) # code segment
 .set gdt64.data, . - gdt64  
     .quad (1<<44) | (1<<47) | (1<<41) # data segment
-.set gdt64.pointer, . - gdt64
+gdt64.pointer:
     .word . - gdt64 - 1         # length
     .quad gdt64                 # address
 
@@ -61,13 +71,21 @@ _start:
     movl $stack_top, %esp
     movl %esp, %ebp
     
-    # Save multiboot information before we lose it
+    # Save multiboot information before we lose it or clobber EAX
     movl %eax, multiboot_magic_store
     movl %ebx, multiboot_info_store
     
+    # Restore magic for check (or use stored value)
+    movl multiboot_magic_store, %eax
+
     # Check for multiboot
     cmpl $0x36d76289, %eax
-    jne no_multiboot
+    je .multiboot_ok
+    cmpl $0x2BADB002, %eax
+    je .multiboot_ok
+    jmp no_multiboot
+
+.multiboot_ok:
     
     # Check for CPUID
     call check_cpuid
@@ -88,7 +106,7 @@ _start:
     movl %eax, %cr4
     
     # Load page table
-    movl $boot_page_directory_ptr_table, %eax
+    movl $boot_pml4, %eax
     movl %eax, %cr3
     
     # Enable long mode
@@ -121,7 +139,7 @@ check_cpuid:
     pushl %ecx
     popfl
     cmpl %ecx, %eax
-    sete %al
+    setne %al
     movzbl %al, %eax
     ret
 
@@ -136,7 +154,7 @@ check_long_mode:
     movl $0x80000001, %eax
     cpuid
     testl $1 << 29, %edx
-    setz %al
+    setnz %al
     movzbl %al, %eax
     ret
     
@@ -145,30 +163,28 @@ check_long_mode:
     ret
 
 setup_page_tables:
-    # Map first 2MB with 2MB pages
-    # PDP table entry
-    movl $boot_page_directory_table, %eax
-    orl $0b11, %eax  # present + writable
-    movl %eax, boot_page_directory_ptr_table
+    # Map PML4[0] -> PDP
+    movl $boot_pdp, %eax
+    orl $0b11, %eax     # present + writable
+    movl %eax, boot_pml4
     
-    # PD table entry  
-    movl $boot_page_table, %eax
-    orl $0b11, %eax  # present + writable
-    movl %eax, boot_page_directory_table
+    # Map PDP[0] -> PD
+    movl $boot_pd, %eax
+    orl $0b11, %eax     # present + writable
+    movl %eax, boot_pdp
     
-    # Page table entries (identity map first 2MB)
-    movl $boot_page_table, %edi
-    movl $0, %ebx
-    movl $512, %ecx
+    # Map PD[0..511] -> 2MB Pages (Identity map 0-1GB)
+    movl $boot_pd, %edi
+    movl $0, %ebx       # Physical address
+    movl $512, %ecx     # 512 entries
     
-.map_page_table:
+.map_pd_loop:
     movl %ebx, %eax
-    shll $12, %eax    # multiply by 4096 (page size)
-    orl $0b11, %eax   # present + writable
+    orl $0b10000011, %eax # present + writable + huge (2MB)
     movl %eax, (%edi)
-    addl $8, %edi
-    incl %ebx
-    loop .map_page_table
+    addl $8, %edi       # Next entry
+    addl $0x200000, %ebx # Next 2MB
+    loop .map_pd_loop
     
     ret
 
@@ -228,6 +244,10 @@ print_string:
     ret
 
 no_multiboot:
+    # DEBUG: Print 'M' to serial port COM1
+    mov $0x3f8, %dx
+    mov $'M', %al
+    out %al, %dx
     movl $no_multiboot_msg, %esi
     call print_string_32
     jmp halt32
@@ -272,3 +292,5 @@ no_cpuid_msg:
     
 no_long_mode_msg:
     .asciz "ERROR: Long mode not supported"
+
+

@@ -403,8 +403,37 @@ impl TimerWheel {
 	}
 
 	pub fn add_timer(&mut self, timer: HrTimer) {
-		// TODO: Add timer to appropriate level based on expiry time
-		let level = 0; // Simplified
+		let now_ns = get_time_ns();
+		let expires_ns = timer.expires.to_ns();
+
+		// If already expired or expires very soon, put in level 0
+		if expires_ns <= now_ns {
+			self.levels[0].push(timer);
+			return;
+		}
+
+		let delta_ns = expires_ns - now_ns;
+		let delta_jiffies = delta_ns / NSEC_PER_JIFFY;
+
+		// Determine level based on delta
+		// Level 0: Immediate to ~256ms
+		// Level 1: ~256ms to ~16s
+		// Level 2: ~16s to ~17m
+		// Level 3: ~17m to ~18h
+		// Level 4+: Far future
+		let level = if delta_jiffies < 256 {
+			0
+		} else if delta_jiffies < 256 * 64 {
+			1
+		} else if delta_jiffies < 256 * 64 * 64 {
+			2
+		} else if delta_jiffies < 256 * 64 * 64 * 64 {
+			3
+		} else {
+			4
+		};
+
+		let level = core::cmp::min(level, 7);
 		self.levels[level].push(timer);
 	}
 

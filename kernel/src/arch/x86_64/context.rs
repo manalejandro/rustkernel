@@ -166,32 +166,88 @@ impl Context {
 
 	/// Restore CPU context and switch to it
 	pub unsafe fn restore(&self) -> ! {
-		// For now, implement a simplified version that doesn't cause register pressure
-		// TODO: Implement full context switching with proper register restoration
-
-		// Restore page table
-		asm!("mov cr3, {}", in(reg) self.cr3);
-
-		// Set up a minimal context switch by jumping to the target RIP
-		// This is a simplified version - a full implementation would restore all
-		// registers
+		// Restore context using the pointer to self (passed in rdi)
 		asm!(
-		    "mov rsp, {}",
-		    "push {}",    // CS for iretq
-		    "push {}",    // RIP for iretq
-		    "pushfq",     // Push current flags
-		    "pop rax",
-		    "or rax, 0x200", // Enable interrupts
-		    "push rax",   // RFLAGS for iretq
-		    "push {}",    // CS again
-		    "push {}",    // RIP again
-		    "iretq",
-		    in(reg) self.rsp,
-		    in(reg) self.cs as u64,
-		    in(reg) self.rip,
-		    in(reg) self.cs as u64,
-		    in(reg) self.rip,
-		    options(noreturn)
+			// Restore CR3 (Page Table)
+			"mov rax, [rdi + 144]",
+			"mov cr3, rax",
+
+			// Switch stack to the target stack
+			"mov rsp, [rdi + 56]",
+
+			// Construct interrupt stack frame for iretq
+			// Stack layout: SS, RSP, RFLAGS, CS, RIP
+
+			// SS
+			"movzx rax, word ptr [rdi + 162]",
+			"push rax",
+
+			// RSP (target stack pointer)
+			"mov rax, [rdi + 56]",
+			"push rax",
+
+			// RFLAGS
+			"mov rax, [rdi + 136]",
+			"push rax",
+
+			// CS
+			"movzx rax, word ptr [rdi + 152]",
+			"push rax",
+
+			// RIP
+			"mov rax, [rdi + 128]",
+			"push rax",
+
+			// Push General Purpose Registers onto the new stack
+			// We push them in reverse order of popping
+			"push qword ptr [rdi + 0]",   // rax
+			"push qword ptr [rdi + 8]",   // rbx
+			"push qword ptr [rdi + 16]",  // rcx
+			"push qword ptr [rdi + 24]",  // rdx
+			"push qword ptr [rdi + 32]",  // rsi
+			"push qword ptr [rdi + 40]",  // rdi
+			"push qword ptr [rdi + 48]",  // rbp
+			// rsp is handled by stack switch
+			"push qword ptr [rdi + 64]",  // r8
+			"push qword ptr [rdi + 72]",  // r9
+			"push qword ptr [rdi + 80]",  // r10
+			"push qword ptr [rdi + 88]",  // r11
+			"push qword ptr [rdi + 96]",  // r12
+			"push qword ptr [rdi + 104]", // r13
+			"push qword ptr [rdi + 112]", // r14
+			"push qword ptr [rdi + 120]", // r15
+
+			// Restore Segment Registers
+			"mov ax, [rdi + 154]", // ds
+			"mov ds, ax",
+			"mov ax, [rdi + 156]", // es
+			"mov es, ax",
+			"mov ax, [rdi + 158]", // fs
+			"mov fs, ax",
+			"mov ax, [rdi + 160]", // gs
+			"mov gs, ax",
+
+			// Pop General Purpose Registers
+			"pop r15",
+			"pop r14",
+			"pop r13",
+			"pop r12",
+			"pop r11",
+			"pop r10",
+			"pop r9",
+			"pop r8",
+			"pop rbp",
+			"pop rdi", // This restores the target rdi
+			"pop rsi",
+			"pop rdx",
+			"pop rcx",
+			"pop rbx",
+			"pop rax",
+
+			// Return from interrupt (restores RIP, CS, RFLAGS, RSP, SS)
+			"iretq",
+			in("rdi") self,
+			options(noreturn)
 		);
 	}
 }

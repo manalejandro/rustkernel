@@ -458,32 +458,39 @@ impl Scheduler {
 		if let Some(current_tid) = self.current {
 			if current_tid != tid {
 				// Look up current and next threads
-				let process_table = PROCESS_TABLE.lock();
-				if let (Some(current_thread), Some(next_thread)) = (
-					process_table.find_thread(current_tid),
-					process_table.find_thread(tid),
-				) {
-					// Update scheduler state
-					self.current = Some(tid);
-					self.nr_switches += 1;
+				// We need to use a scope to ensure the lock is dropped before switching
+				let (current_ctx_ptr, next_ctx_ptr) = {
+					let mut process_table = PROCESS_TABLE.lock();
 
-					// Drop the lock before context switch to avoid deadlock
-					drop(process_table);
+					let (current_thread, next_thread) = process_table
+						.find_two_threads_mut(current_tid, tid);
 
-					// TODO: Implement actual context switch
-					// This would involve:
-					// 1. Saving current thread's context
-					// 2. Loading next thread's context
-					// 3. Switching page tables if different processes
-					// 4. Updating stack pointer and instruction pointer
+					let current_ptr = if let Some(t) = current_thread {
+						&mut t.context as *mut Context
+					} else {
+						return; // Current thread not found?
+					};
 
-					crate::info!(
-						"Context switch from TID {} to TID {}",
-						current_tid.0,
-						tid.0
-					);
-					return;
+					let next_ptr = if let Some(t) = next_thread {
+						&t.context as *const Context
+					} else {
+						return; // Next thread not found
+					};
+
+					(current_ptr, next_ptr)
+				};
+
+				// Update scheduler state
+				self.current = Some(tid);
+				self.nr_switches += 1;
+
+				// Perform the context switch
+				// SAFETY: We have valid pointers to the contexts and we've dropped the lock
+				unsafe {
+					switch_context(&mut *current_ctx_ptr, &*next_ctx_ptr);
 				}
+
+				return;
 			}
 		}
 
@@ -653,4 +660,11 @@ pub fn scheduler_tick() {
 			}
 		}
 	}
+}
+
+/// Perform a manual context switch to a specific task
+/// This is used by the enhanced scheduler to execute its scheduling decisions
+pub fn context_switch_to(tid: Tid) {
+	let mut scheduler = SCHEDULER.lock();
+	scheduler.switch_to(tid);
 }

@@ -251,6 +251,29 @@ impl ProcessTable {
 		}
 		None
 	}
+
+	pub fn find_two_threads_mut(
+		&mut self,
+		tid1: Tid,
+		tid2: Tid,
+	) -> (Option<&mut Thread>, Option<&mut Thread>) {
+		if tid1 == tid2 {
+			let t = self.find_thread_mut(tid1);
+			return (t, None);
+		}
+
+		// This is a bit inefficient but safe
+		// We can't easily return two mutable references to the same structure
+		// But since they are in different processes or different threads, they are distinct memory locations.
+		// We can use unsafe to cheat the borrow checker, knowing that tid1 != tid2.
+
+		let ptr = self as *mut ProcessTable;
+		unsafe {
+			let t1 = (*ptr).find_thread_mut(tid1);
+			let t2 = (*ptr).find_thread_mut(tid2);
+			(t1, t2)
+		}
+	}
 }
 
 /// Allocate a new PID
@@ -277,6 +300,20 @@ pub fn create_process(name: String, uid: Uid, gid: Gid) -> Result<Pid> {
 	table.add_process(process);
 
 	Ok(pid)
+}
+
+/// Add a thread to the kernel process (PID 0)
+pub fn add_kernel_thread(tid: Tid, context: Context, stack_pointer: VirtAddr) -> Result<()> {
+	let mut table = PROCESS_TABLE.lock();
+	if let Some(process) = table.get_process_mut(Pid(0)) {
+		let mut thread = Thread::new(tid, Pid(0), 0);
+		thread.context = context;
+		thread.stack_pointer = stack_pointer;
+		process.add_thread(thread);
+		Ok(())
+	} else {
+		Err(Error::NotFound)
+	}
 }
 
 /// Get current process PID
