@@ -172,42 +172,42 @@ pub fn vzalloc(size: usize) -> Result<VirtAddr> {
 
 /// Map physical memory into virtual space
 pub fn vmap_phys(phys_addr: PhysAddr, size: usize) -> Result<VirtAddr> {
-    let start_addr;
-    let aligned_size;
-    {
-        let mut allocator = VMALLOC_ALLOCATOR.lock();
-        if allocator.page_table.is_none() {
-            return Err(Error::NotInitialized);
-        }
-        aligned_size = (size + 4095) & !4095;
-        start_addr = allocator.find_free_area(aligned_size)?;
-    }
+	let start_addr;
+	let aligned_size;
+	{
+		let mut allocator = VMALLOC_ALLOCATOR.lock();
+		if allocator.page_table.is_none() {
+			return Err(Error::NotInitialized);
+		}
+		aligned_size = (size + 4095) & !4095;
+		start_addr = allocator.find_free_area(aligned_size)?;
+	}
 
-    let mut allocator = VMALLOC_ALLOCATOR.lock();
-    let page_table = allocator.page_table.as_mut().unwrap();
+	let mut allocator = VMALLOC_ALLOCATOR.lock();
+	let page_table = allocator.page_table.as_mut().unwrap();
 
-    // Map virtual to physical pages
-    let pages_needed = aligned_size / 4096;
-    for i in 0..pages_needed {
-        let virt_addr = VirtAddr::new(start_addr + i * 4096);
-        let phys_addr = PhysAddr::new(phys_addr.as_usize() + i * 4096);
-        page_table.map_page(
-            virt_addr,
-            phys_addr,
-            PageTableFlags::kernel_page() | PageTableFlags::NO_EXECUTE,
-        )?;
-    }
+	// Map virtual to physical pages
+	let pages_needed = aligned_size / 4096;
+	for i in 0..pages_needed {
+		let virt_addr = VirtAddr::new(start_addr + i * 4096);
+		let phys_addr = PhysAddr::new(phys_addr.as_usize() + i * 4096);
+		page_table.map_page(
+			virt_addr,
+			phys_addr,
+			PageTableFlags::kernel_page() | PageTableFlags::NO_EXECUTE,
+		)?;
+	}
 
-    let end_addr = start_addr + aligned_size;
-    let area = VmallocArea {
-        start: VirtAddr::new(start_addr),
-        end: VirtAddr::new(end_addr),
-        size: aligned_size,
-        pages: alloc::vec![], // We don't own these pages
-    };
+	let end_addr = start_addr + aligned_size;
+	let area = VmallocArea {
+		start: VirtAddr::new(start_addr),
+		end: VirtAddr::new(end_addr),
+		size: aligned_size,
+		pages: alloc::vec![], // We don't own these pages
+	};
 
-    allocator.areas.insert(start_addr, area);
-    Ok(VirtAddr::new(start_addr))
+	allocator.areas.insert(start_addr, area);
+	Ok(VirtAddr::new(start_addr))
 }
 
 pub fn vmap(pages: &[PhysAddr], count: usize) -> Result<VirtAddr> {

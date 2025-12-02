@@ -2,6 +2,19 @@
 
 A modern, feature-complete x86_64 kernel written in Rust with advanced scheduling, memory management, IPC, performance monitoring, and comprehensive system administration capabilities.
 
+## 🎯 **Quick Start**
+
+```bash
+# Build the kernel and create bootable ISO
+make iso
+
+# Run in QEMU
+make run
+
+# Or quick test (10 second timeout)
+make test-run
+```
+
 ## 🚀 **Current Status: FULLY FUNCTIONAL**
 
 This kernel is now **production-ready** with all major subsystems implemented and thoroughly tested. It includes advanced features typically found in modern operating systems.
@@ -36,14 +49,13 @@ This kernel is now **production-ready** with all major subsystems implemented an
 
 ### Prerequisites
 ```bash
-# Install Rust nightly toolchain
-rustup install nightly
-rustup default nightly
+# Install Rust (stable or nightly)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Install required tools
-sudo apt-get install nasm make qemu-system-x86
+sudo apt-get install nasm make qemu-system-x86 grub-common xorriso
 # OR on macOS:
-brew install nasm make qemu
+brew install nasm make qemu grub xorriso
 
 # Add Rust bare metal target
 rustup target add x86_64-unknown-none
@@ -53,14 +65,12 @@ rustup target add x86_64-unknown-none
 
 #### 1. **Quick Build (Recommended)**
 ```bash
-# Clean debug build
-RUSTFLAGS="-Awarnings" cargo check
+# Build kernel using Makefile
+make kernel
 
-# Release build with optimizations
-RUSTFLAGS="-Awarnings" cargo build --release
-
-# Build kernel binary
-RUSTFLAGS="-Awarnings" make kernel
+# Or build with cargo directly
+cd kernel
+cargo build --release --target x86_64-unknown-none -Z build-std=core,alloc
 ```
 
 #### 2. **Comprehensive Build & Test**
@@ -69,13 +79,16 @@ RUSTFLAGS="-Awarnings" make kernel
 ./build_and_test.sh
 ```
 
-#### 3. **Debug Build**
+#### 3. **Create Bootable ISO**
 ```bash
-# Debug build with symbols
-cargo build
+# Build kernel binary
+make kernel
 
-# Debug kernel binary
-make kernel-debug
+# Copy to ISO directory
+cp kernel/target/x86_64-unknown-none/release/rust-kernel iso/boot/
+
+# Create ISO with GRUB
+grub-mkrescue -o rust-kernel.iso iso
 ```
 
 #### 4. **Clean Build**
@@ -84,55 +97,66 @@ make kernel-debug
 make clean
 
 # Clean and rebuild
-make clean && RUSTFLAGS="-Awarnings" make kernel
+make clean && make kernel
 ```
 
 ## 🚀 **Running with QEMU**
 
 ### Basic Execution
 ```bash
-# Run kernel in QEMU (basic)
-qemu-system-x86_64 -kernel kernel/target/x86_64-unknown-none/release/rust-kernel
+# Run kernel from ISO (recommended)
+qemu-system-x86_64 -m 512M -cdrom rust-kernel.iso -serial stdio -no-reboot
 
-# Run with more memory and serial output
-qemu-system-x86_64 \
-    -kernel kernel/target/x86_64-unknown-none/release/rust-kernel \
-    -m 128M \
-    -serial stdio \
-    -no-reboot \
-    -no-shutdown
+# Quick test with timeout
+timeout 10s qemu-system-x86_64 -m 512M -cdrom rust-kernel.iso -serial stdio -no-reboot
 ```
 
 ### Advanced QEMU Configuration
 ```bash
-# Full-featured QEMU run with debugging
+# Run with more debugging output
 qemu-system-x86_64 \
-    -kernel kernel/target/x86_64-unknown-none/release/rust-kernel \
-    -m 256M \
-    -smp 2 \
+    -m 512M \
+    -cdrom rust-kernel.iso \
     -serial stdio \
-    -monitor tcp:localhost:4444,server,nowait \
-    -netdev user,id=net0 \
-    -device rtl8139,netdev=net0 \
-    -boot menu=on \
     -no-reboot \
     -no-shutdown \
-    -d guest_errors
+    -d guest_errors,int
+
+# Run with VGA output and serial console
+qemu-system-x86_64 \
+    -m 512M \
+    -cdrom rust-kernel.iso \
+    -serial stdio \
+    -vga std \
+    -no-reboot
 ```
 
 ### Debugging with GDB
 ```bash
 # Run QEMU with GDB server
 qemu-system-x86_64 \
-    -kernel kernel/target/x86_64-unknown-none/release/rust-kernel \
+    -m 512M \
+    -cdrom rust-kernel.iso \
     -s -S \
-    -m 128M \
-    -serial stdio
+    -serial stdio \
+    -no-reboot
 
 # In another terminal, connect GDB
 gdb kernel/target/x86_64-unknown-none/release/rust-kernel
 (gdb) target remote localhost:1234
 (gdb) continue
+```
+
+### Common QEMU Options
+```bash
+-m 512M              # Allocate 512MB of RAM
+-cdrom file.iso      # Boot from ISO image
+-serial stdio        # Redirect serial output to terminal
+-no-reboot           # Exit instead of rebooting on triple fault
+-no-shutdown         # Don't exit QEMU on guest shutdown
+-d guest_errors      # Enable debug output for guest errors
+-s                   # Start GDB server on port 1234
+-S                   # Pause CPU at startup (for debugging)
 ```
 
 ### QEMU Key Combinations

@@ -110,9 +110,9 @@ print_success "Release build completed successfully"
 
 # Build with make (if Makefile exists)
 if [ -f "Makefile" ]; then
-    print_status "Building with Makefile..."
-    run_with_status "make kernel" "Makefile build"
-    print_success "Makefile build completed successfully"
+    print_status "Building kernel binary with Makefile..."
+    run_with_status "make kernel" "Makefile kernel build"
+    print_success "Kernel binary build completed successfully"
 else
     print_warning "Makefile not found, skipping make build"
 fi
@@ -123,18 +123,22 @@ run_with_status "cargo doc --no-deps" "Documentation generation"
 print_success "Documentation generated successfully"
 
 # Check binary size
-if [ -f "target/release/deps/kernel-"*.rlib ]; then
-    KERNEL_SIZE=$(du -h target/release/deps/kernel-*.rlib | cut -f1)
-    print_status "Kernel library size: $KERNEL_SIZE"
+if [ -f "kernel/target/x86_64-unknown-none/release/rust-kernel" ]; then
+    KERNEL_SIZE=$(du -h kernel/target/x86_64-unknown-none/release/rust-kernel | cut -f1)
+    print_status "Kernel binary size: $KERNEL_SIZE"
 fi
 
 # Create ISO
 print_status "Creating bootable ISO..."
-cp target/x86_64-unknown-none/release/rust-kernel iso/boot/rust-kernel
-if grub-mkrescue -o rust-kernel.iso iso > /dev/null 2>&1; then
-    print_success "ISO created: rust-kernel.iso"
+if [ -f "kernel/target/x86_64-unknown-none/release/rust-kernel" ]; then
+    cp kernel/target/x86_64-unknown-none/release/rust-kernel iso/boot/rust-kernel
+    if grub-mkrescue -o rust-kernel.iso iso > /dev/null 2>&1; then
+        print_success "ISO created: rust-kernel.iso"
+    else
+        print_warning "Failed to create ISO (grub-mkrescue not found or failed)"
+    fi
 else
-    print_warning "Failed to create ISO (grub-mkrescue not found or failed)"
+    print_warning "Kernel binary not found, skipping ISO creation"
 fi
 
 # Create build report

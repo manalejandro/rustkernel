@@ -382,7 +382,7 @@ macro_rules! platform_driver {
 }
 
 pub fn pci_config_read(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
-    crate::hardware::pci_config_read(bus, device, function, offset)
+	crate::hardware::pci_config_read(bus, device, function, offset)
 }
 
 #[macro_export]

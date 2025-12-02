@@ -6,8 +6,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use crate::driver::{PciBar, PciDevice};
 use crate::error::Result;
-use crate::driver::{PciDevice, PciBar};
 /// CPU Information
 #[derive(Debug, Clone)]
 pub struct CpuInfo {
@@ -180,18 +180,26 @@ pub fn detect_pci_devices() -> Result<Vec<PciDevice>> {
 				let device_id =
 					(pci_config_read(0, device, function, 0x00) >> 16) as u16;
 				let class_info = pci_config_read(0, device, function, 0x08);
-				let revision = (pci_config_read(0, device, function, 0x08) & 0xFF) as u8;
+				let revision =
+					(pci_config_read(0, device, function, 0x08) & 0xFF) as u8;
 				let mut bars = [PciBar::new(); 6];
 				for i in 0..6 {
-					let bar_val = pci_config_read(0, device, function, 0x10 + (i * 4));
+					let bar_val = pci_config_read(
+						0,
+						device,
+						function,
+						0x10 + (i * 4),
+					);
 					if bar_val == 0 {
 						continue;
 					}
 					let is_io = bar_val & 1 != 0;
 					if is_io {
-						bars[i as usize].address = (bar_val & 0xFFFFFFFC) as u64;
+						bars[i as usize].address =
+							(bar_val & 0xFFFFFFFC) as u64;
 					} else {
-						bars[i as usize].address = (bar_val & 0xFFFFFFF0) as u64;
+						bars[i as usize].address =
+							(bar_val & 0xFFFFFFF0) as u64;
 					}
 					bars[i as usize].flags = bar_val & 0xF;
 				}
@@ -206,7 +214,7 @@ pub fn detect_pci_devices() -> Result<Vec<PciDevice>> {
 					revision,
 					subsystem_vendor: 0, // Not implemented
 					subsystem_device: 0, // Not implemented
-					irq: 0, // Not implemented
+					irq: 0,              // Not implemented
 					bars,
 				});
 			}

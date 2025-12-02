@@ -22,7 +22,9 @@ extern crate alloc;
 // #[cfg(target_arch = "x86_64")]
 // global_asm!(include_str!("arch/x86_64/boot.s"), options(att_syntax));
 
+pub mod advanced_perf; // Advanced performance monitoring and profiling
 pub mod arch;
+pub mod arp;
 pub mod benchmark; // Performance benchmarking
 pub mod boot;
 pub mod console;
@@ -36,6 +38,7 @@ pub mod enhanced_scheduler; // Enhanced preemptive scheduler
 pub mod error;
 pub mod fs;
 pub mod hardware; // Hardware detection and initialization
+pub mod icmp;
 pub mod init;
 pub mod interrupt;
 pub mod ipc; // Inter-process communication
@@ -46,9 +49,6 @@ pub mod memory;
 pub mod module;
 pub mod module_loader; // Dynamic module loading
 pub mod network;
-pub mod arp;
-pub mod icmp;
-pub mod advanced_perf; // Advanced performance monitoring and profiling
 pub mod panic;
 pub mod perf; // Performance monitoring
 pub mod prelude;
@@ -87,6 +87,7 @@ pub extern "C" fn kernel_main() -> ! {
 
 	// Now we can use allocations, continue with full initialization
 	init::early_init();
+
 	init::main_init();
 
 	// Should not return from main_init
@@ -116,24 +117,21 @@ fn early_kernel_init() {
 		loop {}
 	}
 
-	crate::println!("Rust Kernel v{} starting...", VERSION);
-	crate::println!("Early kernel initialization");
+	crate::console::write_str("\n");
+	crate::console::write_str("Booting Rust Kernel...\n");
 }
 
 /// Initialize memory management using multiboot information
 fn memory_init() -> Result<(), error::Error> {
-	if let Some(multiboot_addr) = boot::get_boot_info().multiboot_addr {
-		boot::multiboot::init_memory_from_multiboot(multiboot_addr)?;
-	} else {
-		// Fallback: initialize with default memory layout
-		memory::page::init()?;
-	}
+	crate::console::write_str("[*] Initializing memory subsystem...\n");
+
+	// FIXME: Multiboot parsing causes crashes - use default memory layout for now
+	memory::page::init()?;
 
 	// Initialize heap allocator
 	memory::kmalloc::init()?;
-	memory::vmalloc::init()?;
 
-	info!("Memory management initialized");
+	crate::console::write_str("[+] Memory subsystem ready\n");
 	Ok(())
 }
 

@@ -15,11 +15,10 @@ const KMALLOC_SIZES: &[usize] = &[8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096
 const MAX_KMALLOC_SIZE: usize = 4096;
 
 /// Slab allocator for small kernel allocations
-/// Uses indices instead of raw pointers for thread safety
+/// Uses physical addresses directly - they're identity-mapped in the first 1GB
 struct SlabAllocator {
-	size_classes: BTreeMap<usize, Vec<usize>>, // Store offsets instead of pointers
-	allocated_blocks: BTreeMap<usize, usize>,  // Maps offsets to size classes
-	base_addr: usize,                          // Base address for calculations
+	size_classes: BTreeMap<usize, Vec<usize>>, // Store physical addresses
+	allocated_blocks: BTreeMap<usize, usize>,  // Maps physical addresses to size classes
 }
 
 impl SlabAllocator {
@@ -27,12 +26,7 @@ impl SlabAllocator {
 		Self {
 			size_classes: BTreeMap::new(),
 			allocated_blocks: BTreeMap::new(),
-			base_addr: 0,
 		}
-	}
-
-	fn init(&mut self, base_addr: usize) {
-		self.base_addr = base_addr;
 	}
 
 	fn allocate(&mut self, size: usize) -> Result<*mut u8> {
@@ -49,9 +43,9 @@ impl SlabAllocator {
 
 		// Try to get from free list
 		if let Some(free_list) = self.size_classes.get_mut(&size_class) {
-			if let Some(offset) = free_list.pop() {
-				self.allocated_blocks.insert(offset, size_class);
-				return Ok((self.base_addr + offset) as *mut u8);
+			if let Some(addr) = free_list.pop() {
+				self.allocated_blocks.insert(addr, size_class);
+				return Ok(addr as *mut u8);
 			}
 		}
 
@@ -63,28 +57,27 @@ impl SlabAllocator {
 		// Allocate a page using buddy allocator
 		let pfn = alloc_pages(0, GfpFlags::KERNEL)?;
 		let page_addr = pfn.to_phys_addr().as_usize();
-		let offset = page_addr - self.base_addr;
 
 		// Split page into blocks of size_class
 		let blocks_per_page = 4096 / size_class;
 		let free_list = self.size_classes.entry(size_class).or_insert_with(Vec::new);
 
 		for i in 1..blocks_per_page {
-			let block_offset = offset + (i * size_class);
-			free_list.push(block_offset);
+			let block_addr = page_addr + (i * size_class);
+			free_list.push(block_addr);
 		}
 
 		// Return the first block
-		self.allocated_blocks.insert(offset, size_class);
+		self.allocated_blocks.insert(page_addr, size_class);
 		Ok(page_addr as *mut u8)
 	}
 
 	fn deallocate(&mut self, ptr: *mut u8) -> Result<()> {
-		let offset = (ptr as usize).saturating_sub(self.base_addr);
-		if let Some(size_class) = self.allocated_blocks.remove(&offset) {
+		let addr = ptr as usize;
+		if let Some(size_class) = self.allocated_blocks.remove(&addr) {
 			let free_list =
 				self.size_classes.entry(size_class).or_insert_with(Vec::new);
-			free_list.push(offset);
+			free_list.push(addr);
 			Ok(())
 		} else {
 			Err(Error::InvalidArgument)
@@ -192,8 +185,6 @@ pub fn krealloc(ptr: *mut u8, old_size: usize, new_size: usize) -> Result<*mut u
 
 /// Initialize the slab allocator
 pub fn init() -> Result<()> {
-	let mut allocator = SLAB_ALLOCATOR.lock();
-	// Use a reasonable base address for offset calculations
-	allocator.init(0x_4000_0000_0000);
+	// No initialization needed - we use physical addresses directly
 	Ok(())
 }

@@ -293,15 +293,19 @@ impl KernelShell {
 				let mut stack = crate::network::NETWORK_STACK.lock();
 				if let Some(ref mut stack) = *stack {
 					for iface_name in stack.list_interfaces() {
-						if let Some(stats) = stack.get_interface_stats(&iface_name) {
+						if let Some(stats) =
+							stack.get_interface_stats(&iface_name)
+						{
 							info!("  {}:", iface_name);
 							info!(
 								"    TX: {} packets, {} bytes",
-								stats.packets_sent, stats.bytes_sent
+								stats.packets_sent,
+								stats.bytes_sent
 							);
 							info!(
 								"    RX: {} packets, {} bytes",
-								stats.packets_received, stats.bytes_received
+								stats.packets_received,
+								stats.bytes_received
 							);
 							info!(
 								"    Errors: {}, Dropped: {}",
@@ -341,12 +345,16 @@ impl KernelShell {
 					sequence_number: 0,
 				};
 
-                let mut data = icmp_packet.to_bytes();
+				let mut data = icmp_packet.to_bytes();
 				let checksum = crate::network::utils::calculate_checksum(&data);
 				icmp_packet.checksum = checksum;
-                data = icmp_packet.to_bytes();
+				data = icmp_packet.to_bytes();
 
-				if let Err(e) = crate::network::send_packet(dest_ip, &data, crate::network::ProtocolType::ICMP) {
+				if let Err(e) = crate::network::send_packet(
+					dest_ip,
+					&data,
+					crate::network::ProtocolType::ICMP,
+				) {
 					error!("Failed to send ping: {}", e);
 				} else {
 					info!("Ping sent to {}", dest_ip);

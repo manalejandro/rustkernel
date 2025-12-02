@@ -149,14 +149,25 @@ pub mod multiboot {
 
 	/// Parse multiboot2 information and initialize memory management
 	pub fn init_memory_from_multiboot(multiboot_addr: usize) -> Result<()> {
-		crate::println!("Parsing multiboot information at 0x{:x}", multiboot_addr);
+		crate::console::write_str("Parsing multiboot\n");
+
+		// Validate multiboot address is in identity-mapped range (0-1GB)
+		if multiboot_addr >= 0x40000000 {
+			// 1GB
+			crate::console::write_str("ERROR: multiboot addr out of range\n");
+			return Err(crate::error::Error::InvalidArgument);
+		}
+
+		crate::console::write_str("Multiboot addr validated\n");
 
 		let multiboot_info = unsafe { &*(multiboot_addr as *const MultibootInfo) };
 
-		crate::println!("Multiboot info size: {} bytes", multiboot_info.total_size);
+		crate::console::write_str("Got multiboot info\n");
 
 		// Parse memory map from multiboot info
 		let mut memory_info = BootMemoryInfo::new();
+
+		crate::console::write_str("Created BootMemoryInfo\n");
 
 		// For now, assume a basic memory layout if we can't parse multiboot properly
 		// This is a fallback to make the kernel bootable
@@ -167,6 +178,7 @@ pub mod multiboot {
 			reserved: 0,
 		};
 
+		crate::console::write_str("Adding default memory region\n");
 		memory_info.add_region(default_memory);
 
 		// Update global boot info
@@ -178,29 +190,43 @@ pub mod multiboot {
 		}
 
 		// Initialize page allocator with available memory
+		// Note: Only first 1GB is identity-mapped in boot.s
+		const MAX_IDENTITY_MAPPED: u64 = 1024 * 1024 * 1024; // 1GB
+
+		crate::console::write_str("Processing memory regions\n");
+
 		for i in 0..memory_info.region_count {
+			crate::console::write_str("Region loop iteration\n");
 			let region = &memory_info.memory_regions[i];
+
 			if region.type_ == memory_type::AVAILABLE {
-				let start_pfn = region.base_addr / 4096;
-				let end_pfn = (region.base_addr + region.length) / 4096;
+				let start_addr = region.base_addr;
+				let end_addr = region.base_addr + region.length;
 
-				crate::println!(
-					"Adding memory region: 0x{:x}-0x{:x}",
-					region.base_addr,
-					region.base_addr + region.length
-				);
+				crate::console::write_str("Available region found\n");
 
+				// Clamp to identity-mapped region
+				let safe_start = start_addr.max(0x100000); // Skip first 1MB (BIOS/kernel)
+				let safe_end = end_addr.min(MAX_IDENTITY_MAPPED);
+
+				crate::console::write_str("Clamped region\n");
+
+				if safe_start >= safe_end {
+					crate::console::write_str("Skipping invalid range\n");
+					continue; // Skip invalid/unmapped region
+				}
+
+				crate::console::write_str("About to call add_free_range\n");
 				// Add this memory region to the page allocator
 				crate::memory::page::add_free_range(
-					PhysAddr::new(region.base_addr as usize),
-					PhysAddr::new((region.base_addr + region.length) as usize),
+					PhysAddr::new(safe_start as usize),
+					PhysAddr::new(safe_end as usize),
 				)?;
+				crate::console::write_str("Successfully added free range\n");
 			}
 		}
 
-		crate::println!("Memory initialization from multiboot completed");
-		crate::println!("Total memory: {} bytes", memory_info.total_memory);
-		crate::println!("Available memory: {} bytes", memory_info.available_memory);
+		crate::console::write_str("Memory init completed\n");
 
 		Ok(())
 	}

@@ -2,7 +2,6 @@
 
 //! Interrupt Descriptor Table (IDT) for x86_64
 
-use core::arch::asm;
 use core::mem::size_of;
 
 use crate::arch::x86_64::port::outb;

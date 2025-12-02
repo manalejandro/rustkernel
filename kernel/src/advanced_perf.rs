@@ -460,14 +460,14 @@ pub fn profile_function(function_name: &str) -> Result<ProfileGuard> {
 #[macro_export]
 macro_rules! perf_counter {
 	($counter_type:expr, $value:expr) => {
-		crate::advanced_perf::record_event($counter_type, $value);
+		$crate::advanced_perf::record_event($counter_type, $value);
 	};
 }
 
 #[macro_export]
 macro_rules! perf_profile {
 	($name:expr, $code:block) => {{
-		let _guard = crate::advanced_perf::profile($name.to_string());
+		let _guard = $crate::advanced_perf::profile($name.to_string());
 		$code
 	}};
 }

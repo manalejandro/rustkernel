@@ -115,7 +115,21 @@ impl PageAllocator {
 
 	/// Add a range of pages to the free list
 	pub fn add_free_range(&mut self, start: Pfn, count: usize) {
-		for i in 0..count {
+		// Safety: Only add pages that are within the identity-mapped region (0-1GB)
+		// Boot assembly maps 0-1GB with 2MB pages
+		const MAX_IDENTITY_MAPPED_PFN: usize = (1024 * 1024 * 1024) / 4096; // 1GB / 4KB
+
+		let safe_count = if start.0 >= MAX_IDENTITY_MAPPED_PFN {
+			// Start is beyond identity mapping, skip entirely
+			return;
+		} else if start.0 + count > MAX_IDENTITY_MAPPED_PFN {
+			// Trim to stay within identity mapping
+			MAX_IDENTITY_MAPPED_PFN - start.0
+		} else {
+			count
+		};
+
+		for i in 0..safe_count {
 			let pfn = Pfn(start.0 + i);
 			let phys_addr = PhysAddr(pfn.0 * 4096);
 
@@ -129,8 +143,8 @@ impl PageAllocator {
 			// Update head
 			self.free_list_head = Some(phys_addr);
 		}
-		self.total_pages += count;
-		self.free_count += count;
+		self.total_pages += safe_count;
+		self.free_count += safe_count;
 	}
 
 	/// Allocate a single page
@@ -173,15 +187,7 @@ impl PageAllocator {
 
 /// Initialize the page allocator
 pub fn init() -> Result<()> {
-	let mut allocator = PAGE_ALLOCATOR.lock();
-
-	// TODO: Get memory map from bootloader/firmware
-	// For now, add a dummy range
-	let start_pfn = Pfn(0x1000); // Start at 16MB
-	let count = 0x10000; // 256MB worth of pages
-
-	allocator.add_free_range(start_pfn, count);
-
+	// Page allocator stub - no actual pages initialized yet
 	Ok(())
 }
 

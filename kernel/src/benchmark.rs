@@ -9,7 +9,7 @@ use alloc::{
 };
 
 use crate::error::Result;
-use crate::time::{get_jiffies, monotonic_time, TimeSpec};
+use crate::time::{get_jiffies, monotonic_time};
 use crate::{info, warn};
 
 /// Benchmark result
