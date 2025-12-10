@@ -1,0 +1,14 @@
+[package]
+name = "drivers"
+version = "0.1.0"
+edition = "2021"
+authors = ["Rust Kernel Contributors"]
+description = "Kernel drivers"
+license = "GPL-2.0"
+
+[lib]
+name = "drivers"
+crate-type = ["rlib"]
+
+[dependencies]
+kernel = { path = "../kernel" }

@@ -1,0 +1,21 @@
+# Clippy configuration for kernel development
+
+# allow = [
+#     "clippy::missing_errors_doc",
+#     "clippy::missing_panics_doc", 
+#     "clippy::module_name_repetitions",
+#     "clippy::inline_always",
+#     "clippy::must_use_candidate",
+#     "clippy::cast_possible_truncation",
+#     "clippy::cast_sign_loss",
+#     "clippy::cast_possible_wrap",
+#     "clippy::similar_names",
+#     "clippy::too_many_lines",
+#     "clippy::unused_self"
+# ]
+
+# Kernel-specific thresholds
+cognitive-complexity-threshold = 30
+too-many-arguments-threshold = 8
+type-complexity-threshold = 250
+# single-char-lifetime-names-threshold = 4

@@ -1,0 +1,27 @@
+target/
+Cargo.lock
+*.swp
+*.swo
+*~
+.DS_Store
+*.orig
+*.rej
+
+# Kernel build artifacts
+*.o
+*.ko
+*.mod.c
+modules.order
+Module.symvers
+.tmp_versions/
+
+# Documentation
+doc/
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# OS files
+Thumbs.db

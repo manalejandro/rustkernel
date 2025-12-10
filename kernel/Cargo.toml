@@ -1,0 +1,31 @@
+[package]
+name = "kernel"
+version = "0.1.0"
+edition = "2021"
+authors = ["Rust Kernel Contributors"]
+description = "Core kernel APIs and functionality"
+license = "GPL-2.0"
+
+[lib]
+name = "kernel"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "rust-kernel"
+path = "src/main.rs"
+
+[dependencies]
+spin = "0.9"
+bitflags = "2.4"
+linked_list_allocator = "0.10"
+
+[features]
+default = []
+alloc = []
+smp = []  # Symmetric Multi-Processing
+debug = []
+
+[build-dependencies]
+cc = "1.0"
+
+# Profile configuration moved to workspace root
